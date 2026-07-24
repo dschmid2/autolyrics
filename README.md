@@ -1,4 +1,4 @@
-# Chor-Projektion
+# Autolyrics
 
 Web-App zur zeilenweisen Projektion von Songtexten (Englisch + deutsche Übersetzung)
 während eines Konzerts. Eine Ansicht dient als Steuerung (Handy/iPad), eine als
@@ -43,7 +43,7 @@ Router/Access Point, der NAS, Steuergerät und Beamer-Rechner ins selbe WLAN bri
 (z. B. ein mitgebrachter Reise-Router, falls die Location kein zuverlässiges WLAN hat).
 
 ### Synology konkret
-1. Diesen Ordner auf die Synology kopieren (z. B. via File Station nach `/docker/chor-projektion`).
+1. Diesen Ordner auf die Synology kopieren (z. B. via File Station nach `/docker/autolyrics`).
 2. Container Manager → Projekt → Erstellen → Pfad auf den Ordner zeigen lassen
    (dort liegt die `docker-compose.yml`) → Erstellen & Starten.
 
