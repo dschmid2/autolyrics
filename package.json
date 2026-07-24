@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "build:css": "tailwindcss -i ./src/styles.css -o ./public/styles.css --minify",
-    "build:js": "esbuild src/index.jsx --bundle --minify --outfile=public/bundle.js",
+    "build:js": "esbuild src/index.jsx --bundle --minify --jsx=automatic --outfile=public/bundle.js",
     "build": "npm run build:css && npm run build:js",
     "start": "node server/index.js",
     "dev": "node server/index.js"
