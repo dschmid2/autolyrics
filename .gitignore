@@ -1,0 +1,6 @@
+node_modules
+data
+*.log
+public/bundle.js
+public/bundle.css
+public/styles.css

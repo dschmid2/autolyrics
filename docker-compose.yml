@@ -1,0 +1,9 @@
+services:
+  chor-projektion:
+    build: .
+    container_name: chor-projektion
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
