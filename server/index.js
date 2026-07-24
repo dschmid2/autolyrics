@@ -82,6 +82,6 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Chor-Projektion läuft auf Port ${PORT}`);
+  console.log(`Autolyrics läuft auf Port ${PORT}`);
   console.log(`Daten werden gespeichert unter: ${DATA_FILE}`);
 });
