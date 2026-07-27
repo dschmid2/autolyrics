@@ -18,27 +18,61 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-function effectiveTime(line, bpm) {
-  if (line.timeSec !== null && line.timeSec !== undefined && line.timeSec !== '') {
-    return Number(line.timeSec) || 0;
+function computeLinesWithTimes(song) {
+  if (!song || !Array.isArray(song.lines)) return [];
+  const bpm = Number(song.bpm) || 90;
+  const timeSigNum = Number(song.timeSigNum) || 4;
+  const lines = [];
+  let prevTime = 0;
+
+  for (let i = 0; i < song.lines.length; i++) {
+    const l = song.lines[i];
+    let t = 0;
+    if (l.mode === 'sec') {
+      t = Number(l.timeSec) || 0;
+    } else if (l.mode === 'relative') {
+      const rel = Number(l.relativeSec) || 0;
+      t = prevTime + rel;
+    } else if (l.mode === 'bar_beat') {
+      const bar = Number(l.bar) || 1;
+      const beat = Number(l.beat) || 1;
+      const totalBeats = (bar - 1) * timeSigNum + (beat - 1);
+      t = Math.max(0, totalBeats * (60 / bpm));
+    } else if (l.mode === 'beat') {
+      const beat = Number(l.beat) || 1;
+      t = Math.max(0, (beat - 1) * 60 / bpm);
+    } else {
+      t = Number(l.timeSec) || 0;
+    }
+
+    const duration = l.duration !== undefined && l.duration !== null && l.duration !== '' ? Number(l.duration) : null;
+    lines.push({ ...l, t, duration });
+    prevTime = t;
   }
-  if (line.beat !== null && line.beat !== undefined && line.beat !== '') {
-    return Math.max(0, (Number(line.beat) - 1) * 60 / (bpm || 1));
-  }
-  return 0;
+
+  return lines.sort((a, b) => a.t - b.t);
 }
 
 function sortedLines(song) {
-  return [...song.lines]
-    .map((l) => ({ ...l, t: effectiveTime(l, song.bpm) }))
-    .sort((a, b) => a.t - b.t);
+  return computeLinesWithTimes(song);
 }
 
 function currentIndex(lines, elapsed) {
   let idx = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].t <= elapsed + 0.001) idx = i;
-    else break;
+    if (lines[i].t <= elapsed + 0.001) {
+      idx = i;
+    } else {
+      break;
+    }
+  }
+  if (idx >= 0) {
+    const line = lines[idx];
+    if (line.duration !== null && line.duration !== undefined && line.duration !== '') {
+      if (elapsed > line.t + Number(line.duration)) {
+        return -1;
+      }
+    }
   }
   return idx;
 }
@@ -51,7 +85,18 @@ function fmtTime(s) {
 }
 
 function defaultPlayback() {
-  return { songId: null, status: 'stopped', anchorEpoch: Date.now(), anchorElapsed: 0, updatedAt: Date.now() };
+  return {
+    songId: null,
+    status: 'stopped',
+    anchorEpoch: Date.now(),
+    anchorElapsed: 0,
+    updatedAt: Date.now(),
+    fontSize: 64,
+    translationPercent: 60,
+    positionX: 50,
+    positionY: 50,
+    showHeartbeat: true
+  };
 }
 
 function computeElapsed(playback) {
@@ -152,6 +197,12 @@ function ProjectionView({ songs, playback, elapsed, onExit }) {
   const pulseDuration = song ? 60 / (song.bpm || 60) : 1;
   const containerRef = useRef(null);
 
+  const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
+  const translationPercent = playback.translationPercent !== undefined ? playback.translationPercent : 60;
+  const positionX = playback.positionX !== undefined ? playback.positionX : 50;
+  const positionY = playback.positionY !== undefined ? playback.positionY : 50;
+  const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
+
   const requestFs = () => {
     if (containerRef.current && containerRef.current.requestFullscreen) {
       containerRef.current.requestFullscreen().catch(() => {});
@@ -159,19 +210,41 @@ function ProjectionView({ songs, playback, elapsed, onExit }) {
   };
 
   return (
-    <div ref={containerRef} className="fixed inset-0 flex flex-col items-center justify-center select-none" style={{ background: COLORS.stageBg }}>
+    <div ref={containerRef} className="fixed inset-0 select-none" style={{ background: COLORS.stageBg }}>
       {line && (
-        <div className="flex flex-col items-center gap-6 px-10 text-center max-w-6xl">
-          <div style={{ color: COLORS.stageText, fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif' }} className="text-6xl md:text-7xl font-semibold leading-tight">
+        <div
+          className="absolute flex flex-col items-center gap-6 px-10 text-center max-w-6xl pointer-events-none"
+          style={{
+            left: `${positionX}%`,
+            top: `${positionY}%`,
+            transform: 'translate(-50%, -50%)',
+            width: '100%',
+          }}
+        >
+          <div
+            style={{
+              color: COLORS.stageText,
+              fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
+              fontSize: `${fontSize}px`,
+            }}
+            className="font-semibold leading-tight"
+          >
             {line.en}
           </div>
-          <div style={{ color: COLORS.stageTextDim, fontFamily: 'ui-sans-serif, system-ui, sans-serif' }} className="text-3xl md:text-4xl font-normal leading-snug">
+          <div
+            style={{
+              color: COLORS.stageTextDim,
+              fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+              fontSize: `${fontSize * translationPercent / 100}px`,
+            }}
+            className="font-normal leading-snug"
+          >
             {line.de}
           </div>
         </div>
       )}
 
-      {song && playback.status === 'playing' && (
+      {song && playback.status === 'playing' && showHeartbeat && (
         <div className="fixed bottom-6 right-6 w-3 h-3 rounded-full choir-beat-dot" style={{ background: COLORS.amber, animationDuration: `${pulseDuration}s` }} />
       )}
 
@@ -185,11 +258,17 @@ function ProjectionView({ songs, playback, elapsed, onExit }) {
   );
 }
 
-function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, onSeek, onNudge, onGotoEditor, onGotoProjection }) {
+function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, onSeek, onNudge, onChangePlayback, onGotoEditor, onGotoProjection }) {
   const song = songs.find((s) => s.id === playback.songId) || null;
   const lines = song ? sortedLines(song) : [];
   const idx = song ? currentIndex(lines, elapsed) : -1;
   const duration = lines.length ? lines[lines.length - 1].t + 4 : 0;
+
+  const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
+  const translationPercent = playback.translationPercent !== undefined ? playback.translationPercent : 60;
+  const positionX = playback.positionX !== undefined ? playback.positionX : 50;
+  const positionY = playback.positionY !== undefined ? playback.positionY : 50;
+  const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
 
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
@@ -230,10 +309,25 @@ function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, o
                 <SkipForward size={20} color={COLORS.ink} />
               </button>
             </div>
-            <div className="flex justify-center">
+            <div className="flex justify-center gap-3">
               <button onClick={onStop} className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
                 <Square size={12} /> Stopp &amp; Schwarz
               </button>
+              {songs.length > 1 && (
+                <button
+                  onClick={() => {
+                    const currentIdx = songs.findIndex((s) => s.id === playback.songId);
+                    if (currentIdx !== -1) {
+                      const nextIdx = (currentIdx + 1) % songs.length;
+                      onLoad(songs[nextIdx]);
+                    }
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1"
+                  style={{ background: COLORS.amber, color: '#241a08' }}
+                >
+                  Nächster Song <SkipForward size={12} />
+                </button>
+              )}
             </div>
 
             <div className="pt-2">
@@ -249,6 +343,85 @@ function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, o
             </div>
           </div>
         )}
+
+        {/* Anzeige-Optionen */}
+        <div className="rounded-xl p-4 space-y-4" style={{ background: COLORS.panelBg2 }}>
+          <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: COLORS.ink }}>Anzeige-Optionen</h2>
+
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+              <span>Schriftgrösse Haupttext</span>
+              <span className="font-mono">{fontSize}px</span>
+            </div>
+            <input
+              type="range"
+              min="20"
+              max="120"
+              value={fontSize}
+              onChange={(e) => onChangePlayback({ fontSize: Number(e.target.value) })}
+              className="w-full accent-amber"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+              <span>Grösse Übersetzung</span>
+              <span className="font-mono">{translationPercent}%</span>
+            </div>
+            <input
+              type="range"
+              min="30"
+              max="100"
+              value={translationPercent}
+              onChange={(e) => onChangePlayback({ translationPercent: Number(e.target.value) })}
+              className="w-full accent-amber"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Position X (Zentrum)</span>
+                <span className="font-mono">{positionX}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={positionX}
+                onChange={(e) => onChangePlayback({ positionX: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Position Y (Zentrum)</span>
+                <span className="font-mono">{positionY}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={positionY}
+                onChange={(e) => onChangePlayback({ positionY: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="checkbox"
+              id="showHeartbeat"
+              checked={showHeartbeat}
+              onChange={(e) => onChangePlayback({ showHeartbeat: e.target.checked })}
+              className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 accent-amber"
+            />
+            <label htmlFor="showHeartbeat" className="text-xs font-medium cursor-pointer" style={{ color: COLORS.ink }}>
+              Pulsierender Punkt (Heartbeat) aktivieren
+            </label>
+          </div>
+        </div>
 
         <div className="flex gap-2 pt-4">
           <button onClick={onGotoEditor} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>
@@ -309,7 +482,7 @@ function ImportExport({ songs, onImport }) {
 function SongEditor({ song, onChange, onDelete }) {
   const update = (patch) => onChange({ ...song, ...patch });
   const updateLine = (id, patch) => update({ lines: song.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
-  const addLine = () => update({ lines: [...song.lines, { id: uid(), en: '', de: '', mode: 'sec', timeSec: 0, beat: '' }] });
+  const addLine = () => update({ lines: [...song.lines, { id: uid(), en: '', de: '', mode: 'sec', timeSec: 0, beat: '', duration: '' }] });
   const removeLine = (id) => update({ lines: song.lines.filter((l) => l.id !== id) });
   const moveLine = (id, dir) => {
     const idx = song.lines.findIndex((l) => l.id === id);
@@ -320,36 +493,114 @@ function SongEditor({ song, onChange, onDelete }) {
     update({ lines: next });
   };
 
+  const computedLines = computeLinesWithTimes(song);
+
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
-        <input value={song.title} onChange={(e) => update({ title: e.target.value })} placeholder="Songtitel" className="flex-1 px-3 py-2 rounded-lg text-sm" style={{ background: COLORS.panelBg2, color: COLORS.ink }} />
-        <input type="number" value={song.bpm} onChange={(e) => update({ bpm: Number(e.target.value) || 1 })} placeholder="BPM" className="w-24 px-3 py-2 rounded-lg text-sm" style={{ background: COLORS.panelBg2, color: COLORS.ink }} />
-        <button onClick={onDelete} aria-label="Song löschen" className="px-3 py-2 rounded-lg" style={{ background: COLORS.danger }}><Trash2 size={16} color="#fff" /></button>
+      <div className="flex gap-2 flex-wrap md:flex-nowrap">
+        <input
+          value={song.title}
+          onChange={(e) => update({ title: e.target.value })}
+          placeholder="Songtitel"
+          className="flex-1 min-w-[150px] px-3 py-2 rounded-lg text-sm"
+          style={{ background: COLORS.panelBg2, color: COLORS.ink }}
+        />
+        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1" style={{ background: COLORS.panelBg2 }}>
+          <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>BPM</span>
+          <input
+            type="number"
+            value={song.bpm}
+            onChange={(e) => update({ bpm: Number(e.target.value) || 1 })}
+            placeholder="BPM"
+            className="w-16 px-1.5 py-1 rounded text-sm bg-white"
+            style={{ color: COLORS.ink }}
+          />
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1" style={{ background: COLORS.panelBg2 }}>
+          <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>Taktart</span>
+          <select
+            value={`${song.timeSigNum || 4}/${song.timeSigDen || 4}`}
+            onChange={(e) => {
+              const [num, den] = e.target.value.split('/');
+              update({ timeSigNum: Number(num), timeSigDen: Number(den) });
+            }}
+            className="px-1.5 py-1 rounded text-sm bg-white cursor-pointer"
+            style={{ color: COLORS.ink }}
+          >
+            <option value="4/4">4/4</option>
+            <option value="3/4">3/4</option>
+            <option value="2/4">2/4</option>
+            <option value="6/8">6/8</option>
+            <option value="5/4">5/4</option>
+          </select>
+        </div>
+        <button
+          onClick={onDelete}
+          aria-label="Song löschen"
+          className="px-3 py-2 rounded-lg shrink-0"
+          style={{ background: COLORS.danger }}
+        >
+          <Trash2 size={16} color="#fff" />
+        </button>
       </div>
 
       <div className="space-y-2">
         {song.lines.map((l) => {
-          const t = effectiveTime(l, song.bpm);
+          const computedLine = computedLines.find((cl) => cl.id === l.id);
+          const t = computedLine ? computedLine.t : 0;
           return (
             <div key={l.id} className="rounded-lg p-2 space-y-1" style={{ background: COLORS.panelBg2 }}>
               <input value={l.en} onChange={(e) => updateLine(l.id, { en: e.target.value })} placeholder="Englisch" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
               <input value={l.de} onChange={(e) => updateLine(l.id, { de: e.target.value })} placeholder="Deutsch (Übersetzung)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
-              <div className="flex items-center gap-2 flex-wrap">
-                <select value={l.mode} onChange={(e) => updateLine(l.id, { mode: e.target.value })} className="text-xs px-1.5 py-1 rounded" style={{ background: '#fff', color: COLORS.ink }}>
-                  <option value="sec">Sekunden</option>
-                  <option value="beat">Taktschlag</option>
+              <div className="flex items-center gap-2 flex-wrap text-xs">
+                <select value={l.mode} onChange={(e) => updateLine(l.id, { mode: e.target.value })} className="px-1.5 py-1 rounded bg-white text-xs border border-gray-200" style={{ color: COLORS.ink }}>
+                  <option value="sec">Absolut (Sekunden)</option>
+                  <option value="relative">Relativ (s seit letzter)</option>
+                  <option value="bar_beat">Takt / Schlag</option>
+                  <option value="beat">Schlag absolut</option>
                 </select>
-                {l.mode === 'sec' ? (
-                  <input type="number" step="0.1" value={l.timeSec} onChange={(e) => updateLine(l.id, { timeSec: e.target.value })} className="w-20 text-xs px-1.5 py-1 rounded" style={{ background: '#fff', color: COLORS.ink }} />
-                ) : (
-                  <input type="number" step="1" value={l.beat} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-20 text-xs px-1.5 py-1 rounded" style={{ background: '#fff', color: COLORS.ink }} />
+
+                {l.mode === 'sec' && (
+                  <div className="flex items-center gap-1">
+                    <span style={{ color: COLORS.inkDim }}>s:</span>
+                    <input type="number" step="0.1" value={l.timeSec !== undefined && l.timeSec !== null ? l.timeSec : ''} onChange={(e) => updateLine(l.id, { timeSec: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                  </div>
                 )}
-                <span className="text-xs" style={{ color: COLORS.inkDim }}>≈ {fmtTime(t)}</span>
+
+                {l.mode === 'relative' && (
+                  <div className="flex items-center gap-1">
+                    <span style={{ color: COLORS.inkDim }}>+s:</span>
+                    <input type="number" step="0.1" value={l.relativeSec !== undefined && l.relativeSec !== null ? l.relativeSec : ''} onChange={(e) => updateLine(l.id, { relativeSec: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                  </div>
+                )}
+
+                {(l.mode === 'bar_beat' || !l.mode) && (
+                  <div className="flex items-center gap-1">
+                    <span style={{ color: COLORS.inkDim }}>Takt:</span>
+                    <input type="number" step="1" min="1" value={l.bar !== undefined && l.bar !== null ? l.bar : 1} onChange={(e) => updateLine(l.id, { bar: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                    <span style={{ color: COLORS.inkDim }}>Schlag:</span>
+                    <input type="number" step="1" min="1" max={song.timeSigNum || 4} value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                  </div>
+                )}
+
+                {l.mode === 'beat' && (
+                  <div className="flex items-center gap-1">
+                    <span style={{ color: COLORS.inkDim }}>Schlag:</span>
+                    <input type="number" step="1" min="1" value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1">
+                  <span style={{ color: COLORS.inkDim }} title="Anzeigedauer in Sekunden">Dauer (s):</span>
+                  <input type="number" step="0.1" min="0" placeholder="∞" value={l.duration !== undefined && l.duration !== null ? l.duration : ''} onChange={(e) => updateLine(l.id, { duration: e.target.value })} className="w-14 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                </div>
+
+                <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>≈ {fmtTime(t)}</span>
+
                 <div className="flex gap-1 ml-auto">
-                  <button onClick={() => moveLine(l.id, -1)} aria-label="Zeile nach oben" className="p-1 rounded" style={{ background: '#fff' }}><ChevronUp size={14} /></button>
-                  <button onClick={() => moveLine(l.id, 1)} aria-label="Zeile nach unten" className="p-1 rounded" style={{ background: '#fff' }}><ChevronDown size={14} /></button>
-                  <button onClick={() => removeLine(l.id)} aria-label="Zeile löschen" className="p-1 rounded" style={{ background: '#fff' }}><Trash2 size={14} color={COLORS.danger} /></button>
+                  <button onClick={() => moveLine(l.id, -1)} aria-label="Zeile nach oben" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronUp size={14} /></button>
+                  <button onClick={() => moveLine(l.id, 1)} aria-label="Zeile nach unten" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronDown size={14} /></button>
+                  <button onClick={() => removeLine(l.id)} aria-label="Zeile löschen" className="p-1 rounded hover:bg-black/10 bg-white"><Trash2 size={14} color={COLORS.danger} /></button>
                 </div>
               </div>
             </div>
@@ -378,6 +629,17 @@ function EditorView({ songs, onChangeSongs, onBack }) {
     if (selectedId === id) setSelectedId(null);
   };
 
+  const moveSong = (id, direction) => {
+    const index = songs.findIndex((s) => s.id === id);
+    if (index === -1) return;
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= songs.length) return;
+    const updated = [...songs];
+    const [moved] = updated.splice(index, 1);
+    updated.splice(nextIndex, 0, moved);
+    onChangeSongs(updated);
+  };
+
   return (
     <div className="min-h-screen" style={{ background: COLORS.panelBg }}>
       <div className="max-w-4xl mx-auto p-4">
@@ -386,9 +648,39 @@ function EditorView({ songs, onChangeSongs, onBack }) {
           <button onClick={onBack} className="text-sm px-3 py-1.5 rounded-lg" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>Zur Steuerung</button>
         </div>
         <div className="flex flex-col md:flex-row gap-4">
-          <div className="md:w-56 shrink-0 space-y-2">
-            {songs.map((s) => (
-              <button key={s.id} onClick={() => setSelectedId(s.id)} className="w-full text-left px-3 py-2 rounded-lg text-sm" style={{ background: s.id === selectedId ? COLORS.amber : COLORS.panelBg2, color: s.id === selectedId ? '#241a08' : COLORS.ink }}>{s.title}</button>
+          <div className="md:w-64 shrink-0 space-y-2">
+            {songs.map((s, index) => (
+              <div
+                key={s.id}
+                className="flex items-center gap-1 w-full rounded-lg pr-1"
+                style={{ background: s.id === selectedId ? COLORS.amber : COLORS.panelBg2 }}
+              >
+                <button
+                  onClick={() => setSelectedId(s.id)}
+                  className="flex-1 text-left px-3 py-2 text-sm font-medium truncate"
+                  style={{ color: s.id === selectedId ? '#241a08' : COLORS.ink }}
+                >
+                  {s.title}
+                </button>
+                <div className="flex flex-col shrink-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); moveSong(s.id, -1); }}
+                    disabled={index === 0}
+                    className="p-0.5 hover:bg-black/10 rounded disabled:opacity-30"
+                    title="Nach oben verschieben"
+                  >
+                    <ChevronUp size={14} color={s.id === selectedId ? '#241a08' : COLORS.ink} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); moveSong(s.id, 1); }}
+                    disabled={index === songs.length - 1}
+                    className="p-0.5 hover:bg-black/10 rounded disabled:opacity-30"
+                    title="Nach unten verschieben"
+                  >
+                    <ChevronDown size={14} color={s.id === selectedId ? '#241a08' : COLORS.ink} />
+                  </button>
+                </div>
+              </div>
             ))}
             <button onClick={addSong} className="w-full text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}><Plus size={14} /> Neuer Song</button>
           </div>
@@ -442,6 +734,7 @@ export default function App() {
           onStop={stopSong}
           onSeek={seekTo}
           onNudge={nudge}
+          onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })}
           onGotoEditor={() => setView('editor')}
           onGotoProjection={() => setView('projection')}
         />
