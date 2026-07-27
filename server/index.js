@@ -9,7 +9,18 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const DATA_FILE = path.join(DATA_DIR, 'state.json');
 
 function defaultPlayback() {
-  return { songId: null, status: 'stopped', anchorEpoch: Date.now(), anchorElapsed: 0, updatedAt: Date.now() };
+  return {
+    songId: null,
+    status: 'stopped',
+    anchorEpoch: Date.now(),
+    anchorElapsed: 0,
+    updatedAt: Date.now(),
+    fontSize: 64,
+    translationPercent: 60,
+    positionX: 50,
+    positionY: 50,
+    showHeartbeat: true
+  };
 }
 
 const DEMO_SONG = {
