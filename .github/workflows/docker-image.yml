@@ -38,3 +38,9 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Portainer Webhook auslösen (falls konfiguriert)
+        if: ${{ secrets.PORTAINER_WEBHOOK_URL != '' }}
+        run: |
+          echo "Triggere Portainer Webhook..."
+          curl -X POST -f "${{ secrets.PORTAINER_WEBHOOK_URL }}" || echo "Webhook Trigger fehlgeschlagen!"
