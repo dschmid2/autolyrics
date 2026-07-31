@@ -57,7 +57,18 @@ function sortedLines(song) {
   return computeLinesWithTimes(song);
 }
 
+function getSongDuration(lines) {
+  if (!lines || !lines.length) return 0;
+  const lastLine = lines[lines.length - 1];
+  const dur = lastLine.duration !== null && lastLine.duration !== undefined && lastLine.duration !== '' ? Number(lastLine.duration) : 4;
+  return lastLine.t + dur;
+}
+
 function currentIndex(lines, elapsed) {
+  if (!lines || !lines.length) return -1;
+  const duration = getSongDuration(lines);
+  if (elapsed >= duration) return -1;
+
   let idx = -1;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].t <= elapsed + 0.001) {
@@ -180,6 +191,137 @@ function useElapsed(playback) {
 }
 
 // --- Views ------------------------------------------------------------------
+
+function OptionsView({ playback, onChangePlayback, onBack }) {
+  const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
+  const translationPercent = playback.translationPercent !== undefined ? playback.translationPercent : 60;
+  const positionX = playback.positionX !== undefined ? playback.positionX : 50;
+  const positionY = playback.positionY !== undefined ? playback.positionY : 50;
+  const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
+  const stagePastLines = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
+  const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
+
+  return (
+    <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
+      <div className="p-4 space-y-4 max-w-md mx-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Anzeige-Optionen</h1>
+          <button onClick={onBack} className="text-sm px-3 py-1.5 rounded-lg" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>Zurück</button>
+        </div>
+
+        <div className="rounded-xl p-4 space-y-4" style={{ background: COLORS.panelBg2 }}>
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+              <span>Schriftgrösse Haupttext</span>
+              <span className="font-mono">{fontSize}px</span>
+            </div>
+            <input
+              type="range"
+              min="20"
+              max="120"
+              value={fontSize}
+              onChange={(e) => onChangePlayback({ fontSize: Number(e.target.value) })}
+              className="w-full accent-amber"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+              <span>Grösse Übersetzung</span>
+              <span className="font-mono">{translationPercent}%</span>
+            </div>
+            <input
+              type="range"
+              min="30"
+              max="100"
+              value={translationPercent}
+              onChange={(e) => onChangePlayback({ translationPercent: Number(e.target.value) })}
+              className="w-full accent-amber"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Position X (Zentrum)</span>
+                <span className="font-mono">{positionX}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={positionX}
+                onChange={(e) => onChangePlayback({ positionX: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Position Y (Zentrum)</span>
+                <span className="font-mono">{positionY}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={positionY}
+                onChange={(e) => onChangePlayback({ positionY: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="checkbox"
+              id="showHeartbeat"
+              checked={showHeartbeat}
+              onChange={(e) => onChangePlayback({ showHeartbeat: e.target.checked })}
+              className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 accent-amber"
+            />
+            <label htmlFor="showHeartbeat" className="text-xs font-medium cursor-pointer" style={{ color: COLORS.ink }}>
+              Pulsierender Punkt (Heartbeat) aktivieren
+            </label>
+          </div>
+
+          <div className="border-t pt-3 mt-3 space-y-3" style={{ borderColor: COLORS.line }}>
+            <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.ink }}>Stage-View Optionen</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                  <span>Vergangene Zeilen</span>
+                  <span className="font-mono">{stagePastLines}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="5"
+                  value={stagePastLines}
+                  onChange={(e) => onChangePlayback({ stagePastLines: Number(e.target.value) })}
+                  className="w-full accent-amber"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                  <span>Zukünftige Zeilen</span>
+                  <span className="font-mono">{stageFutureLines}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="5"
+                  value={stageFutureLines}
+                  onChange={(e) => onChangePlayback({ stageFutureLines: Number(e.target.value) })}
+                  className="w-full accent-amber"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ConnectionBadge({ connected }) {
   if (connected) return null;
@@ -318,6 +460,8 @@ function ProjectionView({ songs, playback, elapsed, onExit }) {
   const song = songs.find((s) => s.id === playback.songId) || null;
   const showText = playback.status === 'playing' && song;
   const lines = song ? sortedLines(song) : [];
+  const duration = getSongDuration(lines);
+  const isSongCompleted = song && elapsed >= duration;
   const idx = showText ? currentIndex(lines, elapsed) : -1;
   const line = idx >= 0 ? lines[idx] : null;
   const pulseDuration = song ? 60 / (song.bpm || 60) : 1;
@@ -370,9 +514,17 @@ function ProjectionView({ songs, playback, elapsed, onExit }) {
         </div>
       )}
 
-      {song && playback.status === 'playing' && showHeartbeat && (
+      {song && playback.status === 'playing' && showHeartbeat && !isSongCompleted && (
         <div className="fixed bottom-6 right-6 w-3 h-3 rounded-full choir-beat-dot" style={{ background: COLORS.amber, animationDuration: `${pulseDuration}s` }} />
       )}
+
+      {/* Invisible exit button in top-right corner to return to control screen */}
+      <button
+        onClick={onExit}
+        aria-label="Zurück zur Steuerung"
+        className="fixed top-0 right-0 w-24 h-24 bg-transparent border-0 outline-none z-50 cursor-default focus:opacity-0"
+        style={{ WebkitTapHighlightColor: 'transparent' }}
+      />
 
       <button onClick={requestFs} aria-label="Vollbild" className="fixed top-4 left-4 p-2 rounded opacity-10 hover:opacity-70 transition-opacity" style={{ color: COLORS.stageTextDim, border: `1px solid ${COLORS.stageTextDim}` }}>
         <Maximize2 size={14} />
@@ -384,19 +536,11 @@ function ProjectionView({ songs, playback, elapsed, onExit }) {
   );
 }
 
-function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, onSeek, onNudge, onChangePlayback, onGotoEditor, onGotoProjection, onGotoStage }) {
+function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, onSeek, onNudge, onChangePlayback, onGotoEditor, onGotoProjection, onGotoOptions, onGotoStage }) {
   const song = songs.find((s) => s.id === playback.songId) || null;
   const lines = song ? sortedLines(song) : [];
   const idx = song ? currentIndex(lines, elapsed) : -1;
-  const duration = lines.length ? lines[lines.length - 1].t + 4 : 0;
-
-  const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
-  const translationPercent = playback.translationPercent !== undefined ? playback.translationPercent : 60;
-  const positionX = playback.positionX !== undefined ? playback.positionX : 50;
-  const positionY = playback.positionY !== undefined ? playback.positionY : 50;
-  const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
-  const stagePastLines = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
-  const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
+  const duration = getSongDuration(lines);
 
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
@@ -472,133 +616,21 @@ function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, o
           </div>
         )}
 
-        {/* Anzeige-Optionen */}
-        <div className="rounded-xl p-4 space-y-4" style={{ background: COLORS.panelBg2 }}>
-          <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: COLORS.ink }}>Anzeige-Optionen</h2>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Schriftgrösse Haupttext</span>
-              <span className="font-mono">{fontSize}px</span>
-            </div>
-            <input
-              type="range"
-              min="20"
-              max="120"
-              value={fontSize}
-              onChange={(e) => onChangePlayback({ fontSize: Number(e.target.value) })}
-              className="w-full accent-amber"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Grösse Übersetzung</span>
-              <span className="font-mono">{translationPercent}%</span>
-            </div>
-            <input
-              type="range"
-              min="30"
-              max="100"
-              value={translationPercent}
-              onChange={(e) => onChangePlayback({ translationPercent: Number(e.target.value) })}
-              className="w-full accent-amber"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Position X (Zentrum)</span>
-                <span className="font-mono">{positionX}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={positionX}
-                onChange={(e) => onChangePlayback({ positionX: Number(e.target.value) })}
-                className="w-full accent-amber"
-              />
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Position Y (Zentrum)</span>
-                <span className="font-mono">{positionY}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={positionY}
-                onChange={(e) => onChangePlayback({ positionY: Number(e.target.value) })}
-                className="w-full accent-amber"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="showHeartbeat"
-              checked={showHeartbeat}
-              onChange={(e) => onChangePlayback({ showHeartbeat: e.target.checked })}
-              className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 accent-amber"
-            />
-            <label htmlFor="showHeartbeat" className="text-xs font-medium cursor-pointer" style={{ color: COLORS.ink }}>
-              Pulsierender Punkt (Heartbeat) aktivieren
-            </label>
-          </div>
-
-          <div className="border-t pt-3 mt-3 space-y-3" style={{ borderColor: COLORS.line }}>
-            <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.ink }}>Stage-View Optionen</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                  <span>Vergangene Zeilen</span>
-                  <span className="font-mono">{stagePastLines}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="5"
-                  value={stagePastLines}
-                  onChange={(e) => onChangePlayback({ stagePastLines: Number(e.target.value) })}
-                  className="w-full accent-amber"
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                  <span>Zukünftige Zeilen</span>
-                  <span className="font-mono">{stageFutureLines}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="5"
-                  value={stageFutureLines}
-                  onChange={(e) => onChangePlayback({ stageFutureLines: Number(e.target.value) })}
-                  className="w-full accent-amber"
-                />
-              </div>
-            </div>
-          </div>
+        <div className="flex gap-2 pt-4">
+          <button onClick={onGotoOptions} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>
+            <Settings2 size={14} /> Anzeige-Optionen
+          </button>
+          <button onClick={onGotoEditor} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>
+            <Settings2 size={14} /> Songs verwalten
+          </button>
         </div>
-
-        <div className="flex flex-col gap-2 pt-2">
-          <div className="flex gap-2">
-            <button onClick={onGotoEditor} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>
-              <Settings2 size={14} /> Songs verwalten
-            </button>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={onGotoProjection} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}>
-              <Maximize2 size={14} /> Projektion öffnen
-            </button>
-            <button onClick={onGotoStage} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}>
-              <Maximize2 size={14} /> Stageview öffnen
-            </button>
-          </div>
+        <div className="flex gap-2 pt-2">
+          <button onClick={onGotoProjection} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}>
+            <Maximize2 size={14} /> Projektion öffnen
+          </button>
+          <button onClick={onGotoStage} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}>
+            <Maximize2 size={14} /> Stageview öffnen
+          </button>
         </div>
       </div>
     </div>
@@ -895,6 +927,8 @@ export default function App() {
         <StageView songs={songs} playback={playback} elapsed={elapsed} onExit={() => setView('control')} />
       ) : view === 'editor' ? (
         <EditorView songs={songs} onChangeSongs={sendSongs} onBack={() => setView('control')} />
+      ) : view === 'options' ? (
+        <OptionsView playback={playback} onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })} onBack={() => setView('control')} />
       ) : (
         <ControlView
           songs={songs}
@@ -908,6 +942,7 @@ export default function App() {
           onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })}
           onGotoEditor={() => setView('editor')}
           onGotoProjection={() => setView('projection')}
+          onGotoOptions={() => setView('options')}
           onGotoStage={() => setView('stage')}
         />
       )}
