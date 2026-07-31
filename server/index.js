@@ -19,7 +19,9 @@ function defaultPlayback() {
     translationPercent: 60,
     positionX: 50,
     positionY: 50,
-    showHeartbeat: true
+    showHeartbeat: true,
+    stagePastLines: 2,
+    stageFutureLines: 2
   };
 }
 

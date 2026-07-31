@@ -106,7 +106,9 @@ function defaultPlayback() {
     translationPercent: 60,
     positionX: 50,
     positionY: 50,
-    showHeartbeat: true
+    showHeartbeat: true,
+    stagePastLines: 2,
+    stageFutureLines: 2
   };
 }
 
@@ -196,6 +198,8 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
   const positionX = playback.positionX !== undefined ? playback.positionX : 50;
   const positionY = playback.positionY !== undefined ? playback.positionY : 50;
   const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
+  const stagePastLines = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
+  const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
 
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
@@ -279,6 +283,40 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
               Pulsierender Punkt (Heartbeat) aktivieren
             </label>
           </div>
+
+          <div className="border-t pt-3 mt-3 space-y-3" style={{ borderColor: COLORS.line }}>
+            <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.ink }}>Stage-View Optionen</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                  <span>Vergangene Zeilen</span>
+                  <span className="font-mono">{stagePastLines}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="5"
+                  value={stagePastLines}
+                  onChange={(e) => onChangePlayback({ stagePastLines: Number(e.target.value) })}
+                  className="w-full accent-amber"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                  <span>Zukünftige Zeilen</span>
+                  <span className="font-mono">{stageFutureLines}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="5"
+                  value={stageFutureLines}
+                  onChange={(e) => onChangePlayback({ stageFutureLines: Number(e.target.value) })}
+                  className="w-full accent-amber"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -290,6 +328,130 @@ function ConnectionBadge({ connected }) {
   return (
     <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5" style={{ background: COLORS.danger, color: '#fff' }}>
       <WifiOff size={12} /> Keine Verbindung zum Server – versuche erneut zu verbinden…
+    </div>
+  );
+}
+
+function StageView({ songs, playback, elapsed, onExit }) {
+  const song = songs.find((s) => s.id === playback.songId) || null;
+  const lines = song ? sortedLines(song) : [];
+  const idx = song ? currentIndex(lines, elapsed) : -1;
+  const currentIdx = idx >= 0 ? idx : 0;
+
+  const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
+  const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
+  const pastCount = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
+  const futureCount = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
+
+  const pulseDuration = song ? 60 / (song.bpm || 60) : 1;
+  const containerRef = useRef(null);
+
+  const requestFs = () => {
+    if (containerRef.current && containerRef.current.requestFullscreen) {
+      containerRef.current.requestFullscreen().catch(() => {});
+    }
+  };
+
+  const items = [];
+
+  // Vergangene Zeilen
+  for (let i = pastCount; i >= 1; i--) {
+    const lineIdx = currentIdx - i;
+    if (lineIdx >= 0 && lineIdx < lines.length) {
+      items.push({ line: lines[lineIdx], isCurrent: false, key: `past-${lineIdx}` });
+    } else {
+      items.push({ line: null, isCurrent: false, key: `past-empty-${i}` });
+    }
+  }
+
+  // Aktuelle Zeile
+  if (lines.length > 0) {
+    items.push({ line: lines[currentIdx], isCurrent: true, key: `current-${currentIdx}` });
+  } else {
+    items.push({ line: null, isCurrent: false, key: 'current-empty' });
+  }
+
+  // Zukünftige Zeilen
+  for (let i = 1; i <= futureCount; i++) {
+    const lineIdx = currentIdx + i;
+    if (lineIdx >= 0 && lineIdx < lines.length) {
+      items.push({ line: lines[lineIdx], isCurrent: false, key: `future-${lineIdx}` });
+    } else {
+      items.push({ line: null, isCurrent: false, key: `future-empty-${i}` });
+    }
+  }
+
+  return (
+    <div ref={containerRef} className="fixed inset-0 select-none flex flex-col justify-center items-center px-6 overflow-hidden" style={{ background: COLORS.stageBg }}>
+      <div className="flex flex-col items-center justify-center text-center w-full max-w-5xl space-y-6 md:space-y-8">
+        {items.map((item) => {
+          if (!item.line) {
+            return (
+              <div
+                key={item.key}
+                style={{ height: `${fontSize * 1.2}px` }}
+                className="w-full shrink-0"
+              />
+            );
+          }
+
+          if (item.isCurrent) {
+            return (
+              <div
+                key={item.key}
+                style={{
+                  color: COLORS.stageText,
+                  fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
+                  fontSize: `${fontSize}px`,
+                  lineHeight: '1.2'
+                }}
+                className="font-bold w-full transition-all duration-300 transform scale-105 shrink-0"
+              >
+                {item.line.en}
+              </div>
+            );
+          } else {
+            return (
+              <div
+                key={item.key}
+                style={{
+                  color: COLORS.stageTextDim,
+                  fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
+                  fontSize: `${fontSize * 0.75}px`,
+                  lineHeight: '1.2'
+                }}
+                className="font-normal w-full opacity-40 transition-all duration-300 shrink-0"
+              >
+                {item.line.en}
+              </div>
+            );
+          }
+        })}
+      </div>
+
+      {song && playback.status === 'playing' && showHeartbeat && (
+        <div className="fixed bottom-6 right-6 w-3 h-3 rounded-full choir-beat-dot" style={{ background: COLORS.amber, animationDuration: `${pulseDuration}s` }} />
+      )}
+
+      {/* Unsichtbarer Zurück-Knopf oben rechts, wird bei Hover/Focus leicht sichtbar */}
+      <button
+        onClick={onExit}
+        aria-label="Stageview verlassen"
+        className="fixed top-4 right-4 p-4 rounded opacity-0 hover:opacity-40 focus-visible:opacity-40 transition-opacity z-50 text-white"
+        style={{ border: `1px solid ${COLORS.stageTextDim}` }}
+      >
+        <X size={20} />
+      </button>
+
+      {/* Vollbild-Knopf oben links, ebenfalls unsichtbar/leicht sichtbar auf Hover */}
+      <button
+        onClick={requestFs}
+        aria-label="Vollbild"
+        className="fixed top-4 left-4 p-4 rounded opacity-0 hover:opacity-40 focus-visible:opacity-40 transition-opacity z-50 text-white"
+        style={{ border: `1px solid ${COLORS.stageTextDim}` }}
+      >
+        <Maximize2 size={20} />
+      </button>
     </div>
   );
 }
@@ -374,7 +536,7 @@ function ProjectionView({ songs, playback, elapsed, onExit }) {
   );
 }
 
-function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, onSeek, onNudge, onChangePlayback, onGotoEditor, onGotoProjection, onGotoOptions }) {
+function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, onSeek, onNudge, onChangePlayback, onGotoEditor, onGotoProjection, onGotoOptions, onGotoStage }) {
   const song = songs.find((s) => s.id === playback.songId) || null;
   const lines = song ? sortedLines(song) : [];
   const idx = song ? currentIndex(lines, elapsed) : -1;
@@ -462,9 +624,12 @@ function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, o
             <Settings2 size={14} /> Songs verwalten
           </button>
         </div>
-        <div className="pt-2">
-          <button onClick={onGotoProjection} className="w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}>
+        <div className="flex gap-2 pt-2">
+          <button onClick={onGotoProjection} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}>
             <Maximize2 size={14} /> Projektion öffnen
+          </button>
+          <button onClick={onGotoStage} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}>
+            <Maximize2 size={14} /> Stageview öffnen
           </button>
         </div>
       </div>
@@ -758,6 +923,8 @@ export default function App() {
       `}</style>
       {view === 'projection' ? (
         <ProjectionView songs={songs} playback={playback} elapsed={elapsed} onExit={() => setView('control')} />
+      ) : view === 'stage' ? (
+        <StageView songs={songs} playback={playback} elapsed={elapsed} onExit={() => setView('control')} />
       ) : view === 'editor' ? (
         <EditorView songs={songs} onChangeSongs={sendSongs} onBack={() => setView('control')} />
       ) : view === 'options' ? (
@@ -776,6 +943,7 @@ export default function App() {
           onGotoEditor={() => setView('editor')}
           onGotoProjection={() => setView('projection')}
           onGotoOptions={() => setView('options')}
+          onGotoStage={() => setView('stage')}
         />
       )}
     </>
