@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff } from 'lucide-react';
+import versionData from './version.json';
 
 const COLORS = {
   stageBg: '#0A0A0D',
@@ -456,9 +457,25 @@ function StageView({ songs, playback, elapsed, onExit }) {
   );
 }
 
-function ProjectionView({ songs, playback, elapsed, onExit }) {
+function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
+  const [blackout, setBlackout] = useState(false);
+
+  useEffect(() => {
+    if (connected) {
+      setBlackout(false);
+      return;
+    }
+
+    // Set a timer to trigger blackout after 30 seconds of disconnected state
+    const timer = setTimeout(() => {
+      setBlackout(true);
+    }, 30000);
+
+    return () => clearTimeout(timer);
+  }, [connected]);
+
   const song = songs.find((s) => s.id === playback.songId) || null;
-  const showText = playback.status === 'playing' && song;
+  const showText = !blackout && playback.status === 'playing' && song;
   const lines = song ? sortedLines(song) : [];
   const duration = getSongDuration(lines);
   const isSongCompleted = song && elapsed >= duration;
@@ -514,7 +531,7 @@ function ProjectionView({ songs, playback, elapsed, onExit }) {
         </div>
       )}
 
-      {song && playback.status === 'playing' && showHeartbeat && !isSongCompleted && (
+      {song && playback.status === 'playing' && showHeartbeat && !isSongCompleted && !blackout && (
         <div className="fixed bottom-6 right-6 w-3 h-3 rounded-full choir-beat-dot" style={{ background: COLORS.amber, animationDuration: `${pulseDuration}s` }} />
       )}
 
@@ -545,7 +562,10 @@ function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, o
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
       <div className="p-4 space-y-4 max-w-md mx-auto">
-        <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Steuerung</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Steuerung</h1>
+          <span className="text-xs font-mono" style={{ color: COLORS.inkDim }}>v{versionData.version}</span>
+        </div>
 
         <div className="space-y-2">
           <div className="text-xs uppercase tracking-wide" style={{ color: COLORS.inkDim }}>Song wählen</div>
@@ -896,9 +916,38 @@ function EditorView({ songs, onChangeSongs, onBack }) {
 }
 
 export default function App() {
-  const [view, setView] = useState('control');
+  const [view, setView] = useState(() => {
+    const path = window.location.pathname;
+    if (path === '/live') return 'projection';
+    if (path === '/stage') return 'stage';
+    return 'control';
+  });
+
   const { songs, playback, connected, sendSongs, sendPlayback } = useSyncedState();
   const elapsed = useElapsed(playback);
+
+  // Sync state view changes with the browser URL (via history pushState)
+  const changeView = (nextView) => {
+    setView(nextView);
+    if (nextView === 'projection') {
+      window.history.pushState(null, '', '/live');
+    } else if (nextView === 'stage') {
+      window.history.pushState(null, '', '/stage');
+    } else if (nextView === 'control') {
+      window.history.pushState(null, '', '/');
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      if (path === '/live') setView('projection');
+      else if (path === '/stage') setView('stage');
+      else setView('control');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const loadSong = (song) => sendPlayback({ songId: song.id, status: 'stopped', anchorEpoch: Date.now(), anchorElapsed: 0 });
   const togglePlay = () => {
@@ -922,13 +971,13 @@ export default function App() {
         button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid ${COLORS.amber}; outline-offset: 2px; }
       `}</style>
       {view === 'projection' ? (
-        <ProjectionView songs={songs} playback={playback} elapsed={elapsed} onExit={() => setView('control')} />
+        <ProjectionView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} connected={connected} />
       ) : view === 'stage' ? (
-        <StageView songs={songs} playback={playback} elapsed={elapsed} onExit={() => setView('control')} />
+        <StageView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} />
       ) : view === 'editor' ? (
-        <EditorView songs={songs} onChangeSongs={sendSongs} onBack={() => setView('control')} />
+        <EditorView songs={songs} onChangeSongs={sendSongs} onBack={() => changeView('control')} />
       ) : view === 'options' ? (
-        <OptionsView playback={playback} onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })} onBack={() => setView('control')} />
+        <OptionsView playback={playback} onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })} onBack={() => changeView('control')} />
       ) : (
         <ControlView
           songs={songs}
@@ -941,9 +990,9 @@ export default function App() {
           onNudge={nudge}
           onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })}
           onGotoEditor={() => setView('editor')}
-          onGotoProjection={() => setView('projection')}
+          onGotoProjection={() => changeView('projection')}
           onGotoOptions={() => setView('options')}
-          onGotoStage={() => setView('stage')}
+          onGotoStage={() => changeView('stage')}
         />
       )}
     </>

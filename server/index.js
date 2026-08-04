@@ -64,6 +64,11 @@ const app = express();
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
+// Routing for direct access to /live and /stage
+app.get(['/live', '/stage'], (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+});
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
