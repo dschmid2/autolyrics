@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff } from 'lucide-react';
+import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, QrCode } from 'lucide-react';
+import QRCode from 'qrcode';
 import versionData from './version.json';
 
 const COLORS = {
@@ -109,7 +110,8 @@ function defaultPlayback() {
     positionY: 50,
     showHeartbeat: true,
     stagePastLines: 2,
-    stageFutureLines: 2
+    stageFutureLines: 2,
+    stageLeadSeconds: 0
   };
 }
 
@@ -126,6 +128,8 @@ function useSyncedState() {
   const [songs, setSongs] = useState([]);
   const [playback, setPlayback] = useState(defaultPlayback());
   const [connected, setConnected] = useState(false);
+  const [serverIp, setServerIp] = useState('');
+  const [serverPort, setServerPort] = useState('');
   const wsRef = useRef(null);
 
   useEffect(() => {
@@ -147,7 +151,12 @@ function useSyncedState() {
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
-          if (msg.type === 'state') { setSongs(msg.songs); setPlayback(msg.playback); }
+          if (msg.type === 'state') {
+            setSongs(msg.songs);
+            setPlayback(msg.playback);
+            if (msg.serverIp) setServerIp(msg.serverIp);
+            if (msg.serverPort) setServerPort(msg.serverPort);
+          }
           if (msg.type === 'songs') setSongs(msg.songs);
           if (msg.type === 'playback') setPlayback(msg.playback);
         } catch (e) {}
@@ -177,7 +186,7 @@ function useSyncedState() {
     }
   }, []);
 
-  return { songs, playback, connected, sendSongs, sendPlayback };
+  return { songs, playback, connected, sendSongs, sendPlayback, serverIp, serverPort };
 }
 
 function useElapsed(playback) {
@@ -201,6 +210,7 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
   const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
   const stagePastLines = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
   const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
+  const stageLeadSeconds = playback.stageLeadSeconds !== undefined ? playback.stageLeadSeconds : 0;
 
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
@@ -317,6 +327,22 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
                 />
               </div>
             </div>
+
+            <div className="space-y-1 pt-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Bühnenvorlauf (Sekunden früher)</span>
+                <span className="font-mono">{stageLeadSeconds}s</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="10"
+                step="0.5"
+                value={stageLeadSeconds}
+                onChange={(e) => onChangePlayback({ stageLeadSeconds: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -336,7 +362,8 @@ function ConnectionBadge({ connected }) {
 function StageView({ songs, playback, elapsed, onExit }) {
   const song = songs.find((s) => s.id === playback.songId) || null;
   const lines = song ? sortedLines(song) : [];
-  const idx = song ? currentIndex(lines, elapsed) : -1;
+  const stageLeadSeconds = playback.stageLeadSeconds !== undefined ? playback.stageLeadSeconds : 0;
+  const idx = song ? currentIndex(lines, elapsed + stageLeadSeconds) : -1;
   const currentIdx = idx >= 0 ? idx : 0;
 
   const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
@@ -553,11 +580,43 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
   );
 }
 
-function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, onSeek, onNudge, onChangePlayback, onGotoEditor, onGotoProjection, onGotoOptions, onGotoStage }) {
+function ControlView({ songs, playback, elapsed, serverIp, serverPort, onLoad, onTogglePlay, onStop, onSeek, onNudge, onChangePlayback, onGotoEditor, onGotoProjection, onGotoOptions, onGotoStage }) {
   const song = songs.find((s) => s.id === playback.songId) || null;
   const lines = song ? sortedLines(song) : [];
   const idx = song ? currentIndex(lines, elapsed) : -1;
   const duration = getSongDuration(lines);
+
+  const [showQrSection, setShowQrSection] = useState(false);
+  const [qrBaseUrl, setQrBaseUrl] = useState('');
+  const [liveQr, setLiveQr] = useState('');
+  const [stageQr, setStageQr] = useState('');
+
+  useEffect(() => {
+    let host = window.location.hostname;
+    let port = window.location.port;
+    if ((host === 'localhost' || host === '127.0.0.1') && serverIp && serverIp !== 'localhost') {
+      host = serverIp;
+    }
+    if (serverPort) {
+      port = serverPort;
+    }
+    const base = `${window.location.protocol}//${host}${port ? ':' + port : ''}`;
+    setQrBaseUrl(base);
+  }, [serverIp, serverPort]);
+
+  useEffect(() => {
+    if (!qrBaseUrl) return;
+    const liveUrl = `${qrBaseUrl}/live`;
+    const stageUrl = `${qrBaseUrl}/stage`;
+
+    QRCode.toDataURL(liveUrl, { width: 160, margin: 1 })
+      .then(url => setLiveQr(url))
+      .catch(err => console.error(err));
+
+    QRCode.toDataURL(stageUrl, { width: 160, margin: 1 })
+      .then(url => setStageQr(url))
+      .catch(err => console.error(err));
+  }, [qrBaseUrl]);
 
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
@@ -651,6 +710,63 @@ function ControlView({ songs, playback, elapsed, onLoad, onTogglePlay, onStop, o
           <button onClick={onGotoStage} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}>
             <Maximize2 size={14} /> Stageview öffnen
           </button>
+        </div>
+
+        <div className="pt-4 border-t" style={{ borderColor: COLORS.line }}>
+          <button
+            onClick={() => setShowQrSection(!showQrSection)}
+            className="w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-between"
+            style={{ background: COLORS.panelBg2, color: COLORS.ink }}
+          >
+            <span className="flex items-center gap-1.5">
+              <QrCode size={16} /> QR-Codes für Mobilgeräte
+            </span>
+            {showQrSection ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+
+          {showQrSection && (
+            <div className="mt-3 space-y-4 p-3 rounded-xl" style={{ background: COLORS.panelBg2 }}>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold block" style={{ color: COLORS.inkDim }}>
+                  Ziel-URL / IP anpassen:
+                </label>
+                <input
+                  type="text"
+                  value={qrBaseUrl}
+                  onChange={(e) => setQrBaseUrl(e.target.value)}
+                  placeholder="http://192.168.1.50:8080"
+                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-300"
+                  style={{ background: '#fff', color: COLORS.ink }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
+                  <span className="text-xs font-bold mb-1" style={{ color: COLORS.ink }}>Live (Projection)</span>
+                  {liveQr ? (
+                    <img src={liveQr} alt="QR Code Live" className="w-32 h-32 object-contain" />
+                  ) : (
+                    <div className="w-32 h-32 flex items-center justify-center text-xs text-gray-400">Lädt...</div>
+                  )}
+                  <a href={`${qrBaseUrl}/live`} target="_blank" rel="noreferrer" className="text-[10px] mt-1 text-amber-600 underline truncate max-w-full">
+                    /live öffnen
+                  </a>
+                </div>
+
+                <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
+                  <span className="text-xs font-bold mb-1" style={{ color: COLORS.ink }}>Stageview (Bühne)</span>
+                  {stageQr ? (
+                    <img src={stageQr} alt="QR Code Stage" className="w-32 h-32 object-contain" />
+                  ) : (
+                    <div className="w-32 h-32 flex items-center justify-center text-xs text-gray-400">Lädt...</div>
+                  )}
+                  <a href={`${qrBaseUrl}/stage`} target="_blank" rel="noreferrer" className="text-[10px] mt-1 text-amber-600 underline truncate max-w-full">
+                    /stage öffnen
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -923,7 +1039,7 @@ export default function App() {
     return 'control';
   });
 
-  const { songs, playback, connected, sendSongs, sendPlayback } = useSyncedState();
+  const { songs, playback, connected, sendSongs, sendPlayback, serverIp, serverPort } = useSyncedState();
   const elapsed = useElapsed(playback);
 
   // Sync state view changes with the browser URL (via history pushState)
@@ -983,6 +1099,8 @@ export default function App() {
           songs={songs}
           playback={playback}
           elapsed={elapsed}
+          serverIp={serverIp}
+          serverPort={serverPort}
           onLoad={loadSong}
           onTogglePlay={togglePlay}
           onStop={stopSong}
