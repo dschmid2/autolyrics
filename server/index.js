@@ -2,9 +2,22 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 8080;
+
+function getLocalIpAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const DATA_FILE = path.join(DATA_DIR, 'state.json');
 
@@ -21,7 +34,8 @@ function defaultPlayback() {
     positionY: 50,
     showHeartbeat: true,
     stagePastLines: 2,
-    stageFutureLines: 2
+    stageFutureLines: 2,
+    stageLeadSeconds: 0
   };
 }
 
@@ -80,7 +94,13 @@ function broadcast(msg, exceptWs) {
 }
 
 wss.on('connection', (ws) => {
-  ws.send(JSON.stringify({ type: 'state', songs: state.songs, playback: state.playback }));
+  ws.send(JSON.stringify({
+    type: 'state',
+    songs: state.songs,
+    playback: state.playback,
+    serverIp: getLocalIpAddress(),
+    serverPort: PORT
+  }));
 
   ws.on('message', (raw) => {
     let msg;
