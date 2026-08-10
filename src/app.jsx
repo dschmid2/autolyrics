@@ -35,6 +35,11 @@ function computeLinesWithTimes(song) {
     } else if (l.mode === 'relative') {
       const rel = Number(l.relativeSec) || 0;
       t = prevTime + rel;
+    } else if (l.mode === 'relative_bar_beat') {
+      const relBar = Number(l.relativeBar) || 0;
+      const relBeat = Number(l.relativeBeat) || 0;
+      const totalBeats = relBar * timeSigNum + relBeat;
+      t = prevTime + totalBeats * (60 / bpm);
     } else if (l.mode === 'bar_beat') {
       const bar = Number(l.bar) || 1;
       const beat = Number(l.beat) || 1;
@@ -597,7 +602,9 @@ function ControlView({ songs, playback, elapsed, serverIp, serverPort, onLoad, o
     if ((host === 'localhost' || host === '127.0.0.1') && serverIp && serverIp !== 'localhost') {
       host = serverIp;
     }
-    if (serverPort) {
+    if (!window.location.port) {
+      port = '';
+    } else if (serverPort) {
       port = serverPort;
     }
     const base = `${window.location.protocol}//${host}${port ? ':' + port : ''}`;
@@ -895,6 +902,7 @@ function SongEditor({ song, onChange, onDelete }) {
                   <option value="relative">Relativ (s seit letzter)</option>
                   <option value="bar_beat">Takt / Schlag</option>
                   <option value="beat">Schlag absolut</option>
+                  <option value="relative_bar_beat">Relativ (Takt / Schlag)</option>
                 </select>
 
                 {l.mode === 'sec' && (
@@ -908,6 +916,15 @@ function SongEditor({ song, onChange, onDelete }) {
                   <div className="flex items-center gap-1">
                     <span style={{ color: COLORS.inkDim }}>+s:</span>
                     <input type="number" step="0.1" value={l.relativeSec !== undefined && l.relativeSec !== null ? l.relativeSec : ''} onChange={(e) => updateLine(l.id, { relativeSec: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                  </div>
+                )}
+
+                {l.mode === 'relative_bar_beat' && (
+                  <div className="flex items-center gap-1">
+                    <span style={{ color: COLORS.inkDim }}>+Takt:</span>
+                    <input type="number" step="1" value={l.relativeBar !== undefined && l.relativeBar !== null ? l.relativeBar : ''} onChange={(e) => updateLine(l.id, { relativeBar: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                    <span style={{ color: COLORS.inkDim }}>+Schlag:</span>
+                    <input type="number" step="1" value={l.relativeBeat !== undefined && l.relativeBeat !== null ? l.relativeBeat : ''} onChange={(e) => updateLine(l.id, { relativeBeat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
                   </div>
                 )}
 
