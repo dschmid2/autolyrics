@@ -183,7 +183,7 @@ function useAudioBuffer(audioUrl) {
   return { audioBuffer, loading, error };
 }
 
-function WaveformCanvas({ audioBuffer, pxPerSec, bpm, timeSigNum, duration, width, height = 110 }) {
+function WaveformCanvas({ audioBuffer, pxPerSec, bpm, timeSigNum, duration, width, height = 110, audioOffset = 0 }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -238,12 +238,17 @@ function WaveformCanvas({ audioBuffer, pxPerSec, bpm, timeSigNum, duration, widt
     ctx.fillStyle = '#d89a3e';
 
     for (let x = 0; x < width; x++) {
-      const startTime = x / pxPerSec;
-      const endTime = (x + 1) / pxPerSec;
-      const startSample = Math.floor(startTime * sampleRate);
-      const endSample = Math.min(totalSamples, Math.floor(endTime * sampleRate));
+      const songTime = x / pxPerSec;
+      const audioTime = songTime - audioOffset;
 
-      if (startSample >= totalSamples) break;
+      if (audioTime < 0 || audioTime >= audioBuffer.duration) {
+        continue;
+      }
+
+      const startSample = Math.floor(audioTime * sampleRate);
+      const endSample = Math.min(totalSamples, Math.floor((audioTime + 1 / pxPerSec) * sampleRate));
+
+      if (startSample >= totalSamples || startSample < 0) continue;
 
       let min = 1.0;
       let max = -1.0;
@@ -264,7 +269,7 @@ function WaveformCanvas({ audioBuffer, pxPerSec, bpm, timeSigNum, duration, widt
 
       ctx.fillRect(x, top, 1, barHeight);
     }
-  }, [audioBuffer, pxPerSec, bpm, timeSigNum, duration, width, height]);
+  }, [audioBuffer, pxPerSec, bpm, timeSigNum, duration, width, height, audioOffset]);
 
   return <canvas ref={canvasRef} style={{ width: `${width}px`, height: `${height}px`, display: 'block' }} />;
 }
@@ -278,30 +283,60 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [pxPerSec, setPxPerSec] = useState(40);
   const [isDragging, setIsDragging] = useState(false);
+  const [markerDragMode, setMarkerDragMode] = useState('single');
 
-  const duration = audioBuffer ? audioBuffer.duration : 0;
-  const canvasWidth = Math.max(800, Math.ceil(duration * pxPerSec));
+  const audioOffset = Number(song.audioOffset) || 0;
+  const audioDuration = audioBuffer ? audioBuffer.duration : 0;
+  const songDuration = getSongDuration(computedLines);
+  const totalDuration = Math.max(10, songDuration + 5, (audioDuration + audioOffset) + 5, audioOffset + 10);
+  const canvasWidth = Math.max(800, Math.ceil(totalDuration * pxPerSec));
 
   const bpm = Number(song.bpm) || 90;
   const timeSigNum = Number(song.timeSigNum) || 4;
+  const lastTickRef = useRef(Date.now());
 
   useEffect(() => {
     let animId;
     const update = () => {
-      if (audioRef.current && !audioRef.current.paused) {
-        setCurrentTime(audioRef.current.currentTime);
+      const now = Date.now();
+      const delta = (now - lastTickRef.current) / 1000;
+      lastTickRef.current = now;
+
+      if (isPlaying) {
+        setCurrentTime((prev) => {
+          const nextSongTime = Math.max(0, prev + delta);
+          const targetAudioTime = nextSongTime - audioOffset;
+
+          if (audioRef.current && audioBuffer) {
+            if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
+              if (audioRef.current.paused) {
+                audioRef.current.currentTime = targetAudioTime;
+                audioRef.current.play().catch(() => {});
+              } else {
+                const diff = Math.abs(audioRef.current.currentTime - targetAudioTime);
+                if (diff > 0.15) {
+                  audioRef.current.currentTime = targetAudioTime;
+                }
+              }
+            } else {
+              if (!audioRef.current.paused) {
+                audioRef.current.pause();
+              }
+            }
+          }
+          return nextSongTime;
+        });
         animId = requestAnimationFrame(update);
       }
     };
 
     if (isPlaying) {
+      lastTickRef.current = Date.now();
       animId = requestAnimationFrame(update);
-    } else if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isPlaying]);
+  }, [isPlaying, audioOffset, audioBuffer, audioDuration]);
 
   const togglePlay = () => {
     if (!audioRef.current) return;
@@ -309,23 +344,33 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
-      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+      const targetAudioTime = currentTime - audioOffset;
+      if (audioBuffer && targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
+        audioRef.current.currentTime = targetAudioTime;
+        audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+      } else {
+        setIsPlaying(true);
+      }
     }
   };
 
   const stopAudio = () => {
-    if (!audioRef.current) return;
-    audioRef.current.pause();
-    audioRef.current.currentTime = 0;
+    if (audioRef.current) audioRef.current.pause();
     setIsPlaying(false);
     setCurrentTime(0);
   };
 
   const seekNudge = (delta) => {
-    if (!audioRef.current) return;
-    const newTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + delta));
-    audioRef.current.currentTime = newTime;
-    setCurrentTime(newTime);
+    const newSongTime = Math.max(0, Math.min(totalDuration, currentTime + delta));
+    setCurrentTime(newSongTime);
+    const targetAudioTime = newSongTime - audioOffset;
+    if (audioRef.current && audioBuffer) {
+      if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
+        audioRef.current.currentTime = targetAudioTime;
+      } else {
+        audioRef.current.pause();
+      }
+    }
   };
 
   const addMarkerAtCurrentTime = () => {
@@ -351,15 +396,22 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
   const handleContainerClick = (e) => {
     if (isDragging) return;
     const container = containerRef.current;
-    if (!container || !audioRef.current) return;
+    if (!container) return;
     const rect = container.getBoundingClientRect();
     const x = e.clientX - rect.left + container.scrollLeft;
-    const seekTime = Math.max(0, Math.min(duration, x / pxPerSec));
-    audioRef.current.currentTime = seekTime;
+    const seekTime = Math.max(0, Math.min(totalDuration, x / pxPerSec));
     setCurrentTime(seekTime);
+    const targetAudioTime = seekTime - audioOffset;
+    if (audioRef.current && audioBuffer) {
+      if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
+        audioRef.current.currentTime = targetAudioTime;
+      } else {
+        audioRef.current.pause();
+      }
+    }
   };
 
-  const handleMarkerPointerDown = (e, line, lineIdx) => {
+  const handleAudioOffsetPointerDown = (e) => {
     e.stopPropagation();
     e.preventDefault();
     setIsDragging(true);
@@ -370,16 +422,65 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
     const onPointerMove = (moveEv) => {
       const rect = container.getBoundingClientRect();
       const x = moveEv.clientX - rect.left + container.scrollLeft;
-      const newTime = Math.max(0, Math.min(duration, x / pxPerSec));
+      const newOffset = Math.round((x / pxPerSec) * 10) / 10;
+      onUpdateSong({ audioOffset: newOffset });
+    };
 
-      let prevTime = 0;
-      if (lineIdx > 0 && computedLines[lineIdx - 1]) {
-        prevTime = computedLines[lineIdx - 1].t;
+    const onPointerUp = () => {
+      setIsDragging(false);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  };
+
+  const handleMarkerPointerDown = (e, line, lineIdx) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsDragging(true);
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    const initialComputedLines = [...computedLines];
+    const origTime = initialComputedLines[lineIdx] ? initialComputedLines[lineIdx].t : 0;
+
+    const onPointerMove = (moveEv) => {
+      const rect = container.getBoundingClientRect();
+      const x = moveEv.clientX - rect.left + container.scrollLeft;
+      const newTime = Math.max(0, Math.min(totalDuration, x / pxPerSec));
+      const deltaT = newTime - origTime;
+
+      if (markerDragMode === 'single') {
+        let prevTime = 0;
+        if (lineIdx > 0 && initialComputedLines[lineIdx - 1]) {
+          prevTime = initialComputedLines[lineIdx - 1].t;
+        }
+        const patch = updateLineTimestamp(line, newTime, song, prevTime);
+        const updatedLines = song.lines.map((l) => (l.id === line.id ? { ...l, ...patch } : l));
+        onUpdateSong({ lines: updatedLines });
+      } else {
+        const mapUpdated = new Map();
+        let currentPrevTime = lineIdx > 0 && initialComputedLines[lineIdx - 1] ? initialComputedLines[lineIdx - 1].t : 0;
+
+        for (let j = lineIdx; j < initialComputedLines.length; j++) {
+          const item = initialComputedLines[j];
+          const targetTime = j === lineIdx ? newTime : Math.max(0, item.t + deltaT);
+          const patch = updateLineTimestamp(item, targetTime, song, currentPrevTime);
+          mapUpdated.set(item.id, patch);
+          currentPrevTime = targetTime;
+        }
+
+        const updatedLines = song.lines.map((l) => {
+          if (mapUpdated.has(l.id)) {
+            return { ...l, ...mapUpdated.get(l.id) };
+          }
+          return l;
+        });
+        onUpdateSong({ lines: updatedLines });
       }
-
-      const patch = updateLineTimestamp(line, newTime, song, prevTime);
-      const updatedLines = song.lines.map((l) => (l.id === line.id ? { ...l, ...patch } : l));
-      onUpdateSong({ lines: updatedLines });
     };
 
     const onPointerUp = () => {
@@ -461,10 +562,48 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
 
           <button
             onClick={addMarkerAtCurrentTime}
-            className="ml-2 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 text-xs font-medium flex items-center gap-1 border border-zinc-700"
+            className="ml-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 text-xs font-medium flex items-center gap-1 border border-zinc-700"
           >
             <Plus size={14} /> Marker setzen ({fmtTimeWithTenths(currentTime)})
           </button>
+
+          <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 px-2 py-1 rounded-lg text-xs" title="Audio Startzeitpunkt im Song verschieben (positiv = Audio startet später, negativ = Audio startet früher)">
+            <span className="text-zinc-300 font-medium">Audio-Offset:</span>
+            <input
+              type="number"
+              step="0.1"
+              value={song.audioOffset !== undefined && song.audioOffset !== null ? song.audioOffset : 0}
+              onChange={(e) => onUpdateSong({ audioOffset: Number(e.target.value) || 0 })}
+              className="w-16 px-1.5 py-0.5 rounded bg-zinc-900 text-amber-400 font-mono text-xs border border-zinc-700 text-right"
+            />
+            <span className="text-zinc-400 font-mono text-[10px]">s</span>
+          </div>
+
+          <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 p-0.5 rounded-lg text-xs" title="Bearbeitungsmodus für Marker-Verschiebung">
+            <span className="text-zinc-400 font-medium px-1.5 text-[11px]">Verschiebe-Modus:</span>
+            <button
+              onClick={() => setMarkerDragMode('single')}
+              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                markerDragMode === 'single'
+                  ? 'bg-amber-500 text-black font-semibold'
+                  : 'text-zinc-300 hover:text-white'
+              }`}
+              title="Nur den ausgewählten Marker verschieben"
+            >
+              Nur dieser Marker
+            </button>
+            <button
+              onClick={() => setMarkerDragMode('following')}
+              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                markerDragMode === 'following'
+                  ? 'bg-amber-500 text-black font-semibold'
+                  : 'text-zinc-300 hover:text-white'
+              }`}
+              title="Diesen und alle folgenden Marker verschieben"
+            >
+              Dieser &amp; folgende
+            </button>
+          </div>
         </div>
 
         {/* Zoom Controls */}
@@ -501,10 +640,26 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
             pxPerSec={pxPerSec}
             bpm={bpm}
             timeSigNum={timeSigNum}
-            duration={duration}
+            duration={totalDuration}
             width={canvasWidth}
             height={110}
+            audioOffset={audioOffset}
           />
+
+          {/* Audio Start Offset Drag Handle */}
+          <div
+            onPointerDown={handleAudioOffsetPointerDown}
+            className="absolute top-0 bottom-0 z-25 group cursor-ew-resize flex flex-col items-center"
+            style={{ left: `${Math.max(0, audioOffset * pxPerSec)}px`, transform: 'translateX(-50%)' }}
+          >
+            <div
+              className="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded shadow-md bg-blue-600 text-white hover:bg-blue-500 border border-blue-400 select-none whitespace-nowrap"
+              title="Audio-Start Offset verschieben"
+            >
+              ♫ Audio-Start ({audioOffset > 0 ? `+${audioOffset.toFixed(1)}` : audioOffset.toFixed(1)}s)
+            </div>
+            <div className="w-0.5 flex-1 bg-blue-500 group-hover:bg-blue-400 group-hover:w-1 transition-all" />
+          </div>
 
           {/* Real-time Playhead */}
           <div
@@ -1536,12 +1691,12 @@ function EditorView({ songs, onChangeSongs, onBack }) {
 
   return (
     <div className="min-h-screen" style={{ background: COLORS.panelBg }}>
-      <div className="max-w-4xl mx-auto p-4">
+      <div className="max-w-[1800px] w-full mx-auto p-4 md:px-8">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Songs verwalten</h1>
           <button onClick={onBack} className="text-sm px-3 py-1.5 rounded-lg" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>Zur Steuerung</button>
         </div>
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col md:flex-row gap-6">
           <div className="md:w-64 shrink-0 space-y-2">
             {songs.map((s, index) => (
               <div
