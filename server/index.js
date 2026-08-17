@@ -3,6 +3,7 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const multer = require('multer');
 const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 8080;
@@ -20,6 +21,24 @@ function getLocalIpAddress() {
 }
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const DATA_FILE = path.join(DATA_DIR, 'state.json');
+const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    cb(null, UPLOADS_DIR);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.mp3';
+    const safeName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+    cb(null, `${Date.now()}_${safeName}${ext}`);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 }
+});
 
 function defaultPlayback() {
   return {
@@ -76,7 +95,16 @@ function persist() {
 
 const app = express();
 app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use('/uploads', express.static(UPLOADS_DIR));
 app.get('/healthz', (req, res) => res.json({ ok: true }));
+
+app.post('/api/upload', upload.single('audio'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+  }
+  const audioUrl = `/uploads/${req.file.filename}`;
+  res.json({ url: audioUrl, filename: req.file.filename, originalName: req.file.originalname });
+});
 
 // Routing for direct access to /live and /stage
 app.get(['/live', '/stage'], (req, res) => {
