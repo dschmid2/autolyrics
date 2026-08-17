@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, QrCode } from 'lucide-react';
+import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, QrCode, Upload, ZoomIn, ZoomOut, Music, Clock } from 'lucide-react';
 import QRCode from 'qrcode';
 import versionData from './version.json';
 
@@ -100,6 +100,459 @@ function fmtTime(s) {
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+function fmtTimeWithTenths(s) {
+  if (!isFinite(s) || s < 0) s = 0;
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  const tenths = Math.floor((s % 1) * 10);
+  return `${m}:${String(sec).padStart(2, '0')}.${tenths}`;
+}
+
+function updateLineTimestamp(line, newTime, song, prevLineTime) {
+  const mode = line.mode || 'sec';
+  const bpm = Number(song.bpm) || 90;
+  const timeSigNum = Number(song.timeSigNum) || 4;
+
+  if (mode === 'sec') {
+    return { timeSec: Math.max(0, Math.round(newTime * 100) / 100) };
+  } else if (mode === 'bar_beat') {
+    const totalBeats = Math.max(0, newTime * (bpm / 60));
+    const bar = Math.floor(totalBeats / timeSigNum) + 1;
+    const beat = Math.floor(totalBeats % timeSigNum) + 1;
+    return { bar, beat };
+  } else if (mode === 'beat') {
+    const beat = Math.max(1, Math.round(newTime * (bpm / 60)) + 1);
+    return { beat };
+  } else if (mode === 'relative') {
+    const relSec = Math.max(0, Math.round((newTime - (prevLineTime || 0)) * 100) / 100);
+    return { relativeSec: relSec };
+  } else if (mode === 'relative_bar_beat') {
+    const diffSec = Math.max(0, newTime - (prevLineTime || 0));
+    const totalBeats = diffSec * (bpm / 60);
+    const relativeBar = Math.floor(totalBeats / timeSigNum);
+    const relativeBeat = Math.round(totalBeats % timeSigNum);
+    return { relativeBar, relativeBeat };
+  }
+  return { timeSec: Math.max(0, Math.round(newTime * 100) / 100) };
+}
+
+function useAudioBuffer(audioUrl) {
+  const [audioBuffer, setAudioBuffer] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!audioUrl) {
+      setAudioBuffer(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    fetch(audioUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error('Audio konnte nicht geladen werden');
+        return res.arrayBuffer();
+      })
+      .then((arrayBuffer) => {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioCtx();
+        return ctx.decodeAudioData(arrayBuffer);
+      })
+      .then((buffer) => {
+        if (!cancelled) {
+          setAudioBuffer(buffer);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err.message || 'Fehler beim Dekodieren');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [audioUrl]);
+
+  return { audioBuffer, loading, error };
+}
+
+function WaveformCanvas({ audioBuffer, pxPerSec, bpm, timeSigNum, duration, width, height = 110 }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !audioBuffer) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(0, 0, width, height);
+
+    const data = audioBuffer.getChannelData(0);
+    const sampleRate = audioBuffer.sampleRate;
+    const totalSamples = data.length;
+
+    const secondsPerBeat = 60 / (bpm || 90);
+    const secondsPerBar = secondsPerBeat * (timeSigNum || 4);
+    const totalBars = Math.ceil(duration / secondsPerBar) + 1;
+
+    for (let bar = 0; bar < totalBars; bar++) {
+      const barTime = bar * secondsPerBar;
+      const x = barTime * pxPerSec;
+      if (x > width) break;
+
+      ctx.strokeStyle = '#3f3f46';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+
+      ctx.fillStyle = '#a1a1aa';
+      ctx.font = '10px monospace';
+      ctx.fillText(`T${bar + 1}`, x + 3, 12);
+
+      for (let beat = 1; beat < timeSigNum; beat++) {
+        const beatTime = barTime + beat * secondsPerBeat;
+        const bx = beatTime * pxPerSec;
+        if (bx > width) break;
+        ctx.strokeStyle = '#27272a';
+        ctx.beginPath();
+        ctx.moveTo(bx, 15);
+        ctx.lineTo(bx, height);
+        ctx.stroke();
+      }
+    }
+
+    const centerY = height / 2;
+    ctx.fillStyle = '#d89a3e';
+
+    for (let x = 0; x < width; x++) {
+      const startTime = x / pxPerSec;
+      const endTime = (x + 1) / pxPerSec;
+      const startSample = Math.floor(startTime * sampleRate);
+      const endSample = Math.min(totalSamples, Math.floor(endTime * sampleRate));
+
+      if (startSample >= totalSamples) break;
+
+      let min = 1.0;
+      let max = -1.0;
+      for (let i = startSample; i < endSample; i++) {
+        const sample = data[i];
+        if (sample < min) min = sample;
+        if (sample > max) max = sample;
+      }
+
+      if (min > max) {
+        min = 0;
+        max = 0;
+      }
+
+      const top = centerY - max * (height / 2.2);
+      const bottom = centerY - min * (height / 2.2);
+      const barHeight = Math.max(1, bottom - top);
+
+      ctx.fillRect(x, top, 1, barHeight);
+    }
+  }, [audioBuffer, pxPerSec, bpm, timeSigNum, duration, width, height]);
+
+  return <canvas ref={canvasRef} style={{ width: `${width}px`, height: `${height}px`, display: 'block' }} />;
+}
+
+function WaveformEditor({ song, computedLines, onUpdateSong }) {
+  const { audioBuffer, loading, error } = useAudioBuffer(song.audioUrl);
+  const audioRef = useRef(null);
+  const containerRef = useRef(null);
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [pxPerSec, setPxPerSec] = useState(40);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const duration = audioBuffer ? audioBuffer.duration : 0;
+  const canvasWidth = Math.max(800, Math.ceil(duration * pxPerSec));
+
+  const bpm = Number(song.bpm) || 90;
+  const timeSigNum = Number(song.timeSigNum) || 4;
+
+  useEffect(() => {
+    let animId;
+    const update = () => {
+      if (audioRef.current && !audioRef.current.paused) {
+        setCurrentTime(audioRef.current.currentTime);
+        animId = requestAnimationFrame(update);
+      }
+    };
+
+    if (isPlaying) {
+      animId = requestAnimationFrame(update);
+    } else if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+
+    return () => cancelAnimationFrame(animId);
+  }, [isPlaying]);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+    }
+  };
+
+  const stopAudio = () => {
+    if (!audioRef.current) return;
+    audioRef.current.pause();
+    audioRef.current.currentTime = 0;
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const seekNudge = (delta) => {
+    if (!audioRef.current) return;
+    const newTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + delta));
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  const addMarkerAtCurrentTime = () => {
+    const t = Math.round(currentTime * 100) / 100;
+    const newLine = {
+      id: uid(),
+      en: '',
+      de: '',
+      mode: 'sec',
+      timeSec: t,
+      duration: ''
+    };
+    onUpdateSong({ lines: [...song.lines, newLine] });
+  };
+
+  const totalBeats = currentTime * (bpm / 60);
+  const currentBar = Math.floor(totalBeats / timeSigNum) + 1;
+  const currentBeat = Math.floor(totalBeats % timeSigNum) + 1;
+
+  const activeIdx = currentIndex(computedLines, currentTime);
+  const activeLine = activeIdx >= 0 ? computedLines[activeIdx] : null;
+
+  const handleContainerClick = (e) => {
+    if (isDragging) return;
+    const container = containerRef.current;
+    if (!container || !audioRef.current) return;
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left + container.scrollLeft;
+    const seekTime = Math.max(0, Math.min(duration, x / pxPerSec));
+    audioRef.current.currentTime = seekTime;
+    setCurrentTime(seekTime);
+  };
+
+  const handleMarkerPointerDown = (e, line, lineIdx) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsDragging(true);
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    const onPointerMove = (moveEv) => {
+      const rect = container.getBoundingClientRect();
+      const x = moveEv.clientX - rect.left + container.scrollLeft;
+      const newTime = Math.max(0, Math.min(duration, x / pxPerSec));
+
+      let prevTime = 0;
+      if (lineIdx > 0 && computedLines[lineIdx - 1]) {
+        prevTime = computedLines[lineIdx - 1].t;
+      }
+
+      const patch = updateLineTimestamp(line, newTime, song, prevTime);
+      const updatedLines = song.lines.map((l) => (l.id === line.id ? { ...l, ...patch } : l));
+      onUpdateSong({ lines: updatedLines });
+    };
+
+    const onPointerUp = () => {
+      setIsDragging(false);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  };
+
+  return (
+    <div className="rounded-xl p-3 space-y-3" style={{ background: '#0F0F12', color: '#F4EFE4' }}>
+      <audio
+        ref={audioRef}
+        src={song.audioUrl}
+        onEnded={() => setIsPlaying(false)}
+        onPause={() => setIsPlaying(false)}
+        onPlay={() => setIsPlaying(true)}
+      />
+
+      {/* Top Banner: Preview & Live Clock */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 rounded-lg bg-zinc-900 border border-zinc-800">
+        <div className="md:col-span-2 space-y-1">
+          <div className="text-[10px] uppercase tracking-wider text-amber-500 font-semibold">Vorschau (Aktuelle Zeile)</div>
+          <div className="text-base font-semibold truncate text-zinc-100">
+            {activeLine ? activeLine.en : <span className="text-zinc-500 italic">— Schwarz / Pause —</span>}
+          </div>
+          {activeLine && activeLine.de && (
+            <div className="text-xs text-zinc-400 truncate">{activeLine.de}</div>
+          )}
+        </div>
+
+        <div className="flex flex-col justify-center space-y-1 md:border-l md:border-zinc-800 md:pl-3">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold flex items-center gap-1">
+            <Clock size={12} /> Live-Uhr
+          </div>
+          <div className="text-sm font-mono font-bold text-amber-400">
+            {fmtTimeWithTenths(currentTime)} <span className="text-xs text-zinc-400">({currentTime.toFixed(1)}s)</span>
+          </div>
+          <div className="text-xs font-mono text-zinc-300">
+            Takt <span className="text-amber-400 font-bold">{currentBar}</span>, Schlag <span className="text-amber-400 font-bold">{currentBeat}</span> / {timeSigNum}
+          </div>
+        </div>
+      </div>
+
+      {/* Controls & Zoom Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={togglePlay}
+            className="px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium"
+            style={{ background: COLORS.amber, color: '#241a08' }}
+          >
+            {isPlaying ? <Pause size={14} /> : <Play size={14} />} {isPlaying ? 'Pause' : 'Abspielen'}
+          </button>
+          <button
+            onClick={stopAudio}
+            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+            title="Stopp"
+          >
+            <Square size={14} />
+          </button>
+          <button
+            onClick={() => seekNudge(-5)}
+            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+            title="5s zurück"
+          >
+            <SkipBack size={14} />
+          </button>
+          <button
+            onClick={() => seekNudge(5)}
+            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+            title="5s vor"
+          >
+            <SkipForward size={14} />
+          </button>
+
+          <button
+            onClick={addMarkerAtCurrentTime}
+            className="ml-2 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 text-xs font-medium flex items-center gap-1 border border-zinc-700"
+          >
+            <Plus size={14} /> Marker setzen ({fmtTimeWithTenths(currentTime)})
+          </button>
+        </div>
+
+        {/* Zoom Controls */}
+        <div className="flex items-center gap-2 text-xs text-zinc-300">
+          <ZoomOut size={14} className="text-zinc-400" />
+          <input
+            type="range"
+            min="15"
+            max="250"
+            value={pxPerSec}
+            onChange={(e) => setPxPerSec(Number(e.target.value))}
+            className="w-24 accent-amber-500 cursor-pointer"
+            title="Wellenform Zoom"
+          />
+          <ZoomIn size={14} className="text-zinc-400" />
+          <span className="font-mono text-[10px] text-zinc-400">{pxPerSec}px/s</span>
+        </div>
+      </div>
+
+      {/* Waveform & Marker Area */}
+      {loading ? (
+        <div className="p-8 text-center text-xs text-zinc-400 animate-pulse">Lade MP3-Wellenform…</div>
+      ) : error ? (
+        <div className="p-4 text-center text-xs text-red-400 bg-red-950/30 rounded-lg">{error}</div>
+      ) : (
+        <div
+          ref={containerRef}
+          onClick={handleContainerClick}
+          className="relative overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950 select-none cursor-crosshair"
+          style={{ minHeight: '130px' }}
+        >
+          <WaveformCanvas
+            audioBuffer={audioBuffer}
+            pxPerSec={pxPerSec}
+            bpm={bpm}
+            timeSigNum={timeSigNum}
+            duration={duration}
+            width={canvasWidth}
+            height={110}
+          />
+
+          {/* Real-time Playhead */}
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
+            style={{ left: `${currentTime * pxPerSec}px` }}
+          >
+            <div className="w-2 h-2 -ml-[3px] bg-red-500 rotate-45" />
+          </div>
+
+          {/* Lyric Line Markers */}
+          {computedLines.map((l, i) => {
+            const posX = l.t * pxPerSec;
+            const isActive = i === activeIdx;
+            const lineNum = i + 1;
+            const labelText = l.en ? (l.en.length > 12 ? l.en.substring(0, 12) + '…' : l.en) : `Z${lineNum}`;
+
+            return (
+              <div
+                key={l.id}
+                onPointerDown={(e) => handleMarkerPointerDown(e, l, i)}
+                className="absolute top-0 bottom-0 z-30 group cursor-ew-resize flex flex-col items-center"
+                style={{ left: `${posX}px`, transform: 'translateX(-50%)' }}
+              >
+                {/* Marker Top Badge */}
+                <div
+                  className={`px-1.5 py-0.5 text-[10px] font-mono font-bold rounded shadow-md transition-all whitespace-nowrap select-none ${
+                    isActive
+                      ? 'bg-amber-400 text-black scale-110 ring-2 ring-amber-300'
+                      : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700'
+                  }`}
+                  title={`${l.en || 'Zeile ' + lineNum} (${fmtTimeWithTenths(l.t)})`}
+                >
+                  #{lineNum} {labelText}
+                </div>
+
+                {/* Marker Line */}
+                <div
+                  className={`w-0.5 flex-1 transition-all ${
+                    isActive ? 'bg-amber-400 w-1 shadow-[0_0_8px_#d89a3e]' : 'bg-amber-600/70 group-hover:bg-amber-400'
+                  }`}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function defaultPlayback() {
@@ -824,6 +1277,9 @@ function ImportExport({ songs, onImport }) {
 }
 
 function SongEditor({ song, onChange, onDelete }) {
+  const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
   const update = (patch) => onChange({ ...song, ...patch });
   const updateLine = (id, patch) => update({ lines: song.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
   const addLine = () => update({ lines: [...song.lines, { id: uid(), en: '', de: '', mode: 'sec', timeSec: 0, beat: '', duration: '' }] });
@@ -839,14 +1295,41 @@ function SongEditor({ song, onChange, onDelete }) {
 
   const computedLines = computeLinesWithTimes(song);
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('audio', file);
+    setUploading(true);
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Upload fehlgeschlagen');
+      const data = await res.json();
+      update({ audioUrl: data.url, audioName: data.originalName });
+    } catch (err) {
+      alert('Fehler beim Hochladen der MP3-Datei: ' + err.message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const removeAudio = () => {
+    update({ audioUrl: null, audioName: null });
+  };
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Title & Metadata */}
       <div className="flex gap-2 flex-wrap md:flex-nowrap">
         <input
           value={song.title}
           onChange={(e) => update({ title: e.target.value })}
           placeholder="Songtitel"
-          className="flex-1 min-w-[150px] px-3 py-2 rounded-lg text-sm"
+          className="flex-1 min-w-[150px] px-3 py-2 rounded-lg text-sm font-semibold"
           style={{ background: COLORS.panelBg2, color: COLORS.ink }}
         />
         <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1" style={{ background: COLORS.panelBg2 }}>
@@ -888,13 +1371,70 @@ function SongEditor({ song, onChange, onDelete }) {
         </button>
       </div>
 
+      {/* MP3 Audio Upload & Waveform Section */}
+      <div className="rounded-xl p-3 space-y-3" style={{ background: COLORS.panelBg2 }}>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Music size={18} style={{ color: COLORS.ink }} />
+            <span className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.ink }}>
+              MP3 Audio-Datei
+            </span>
+            {song.audioName && (
+              <span className="text-xs px-2 py-0.5 rounded bg-white font-mono truncate max-w-xs" style={{ color: COLORS.ink }}>
+                {song.audioName}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="audio/mp3,audio/*"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current && fileInputRef.current.click()}
+              disabled={uploading}
+              className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 font-medium disabled:opacity-50"
+              style={{ background: COLORS.amber, color: '#241a08' }}
+            >
+              <Upload size={14} /> {uploading ? 'Lädt hoch…' : song.audioUrl ? 'MP3 ersetzen' : 'MP3 hochladen'}
+            </button>
+            {song.audioUrl && (
+              <button
+                onClick={removeAudio}
+                className="text-xs px-2 py-1.5 rounded-lg text-white font-medium"
+                style={{ background: COLORS.danger }}
+                title="MP3 löschen"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {song.audioUrl ? (
+          <WaveformEditor song={song} computedLines={computedLines} onUpdateSong={update} />
+        ) : (
+          <div className="p-4 text-center border-2 border-dashed rounded-lg text-xs" style={{ borderColor: COLORS.line, color: COLORS.inkDim }}>
+            Keine MP3-Datei verknüpft. Lade eine MP3 hoch, um die interaktive Wellenform mit Zeitstempel-Markern zu nutzen.
+          </div>
+        )}
+      </div>
+
+      {/* Lyric Line Textfields */}
       <div className="space-y-2">
+        <div className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.inkDim }}>
+          Songzeilen &amp; Marker-Zeitstempel
+        </div>
         {song.lines.map((l) => {
           const computedLine = computedLines.find((cl) => cl.id === l.id);
           const t = computedLine ? computedLine.t : 0;
           return (
             <div key={l.id} className="rounded-lg p-2 space-y-1" style={{ background: COLORS.panelBg2 }}>
-              <input value={l.en} onChange={(e) => updateLine(l.id, { en: e.target.value })} placeholder="Englisch" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
+              <input value={l.en} onChange={(e) => updateLine(l.id, { en: e.target.value })} placeholder="Englisch (Haupttext)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
               <input value={l.de} onChange={(e) => updateLine(l.id, { de: e.target.value })} placeholder="Deutsch (Übersetzung)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
               <div className="flex items-center gap-2 flex-wrap text-xs">
                 <select value={l.mode} onChange={(e) => updateLine(l.id, { mode: e.target.value })} className="px-1.5 py-1 rounded bg-white text-xs border border-gray-200" style={{ color: COLORS.ink }}>
