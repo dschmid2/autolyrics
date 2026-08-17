@@ -12,7 +12,7 @@ try {
 }
 
 const versionData = {
-  version: `1.0.${buildNumber}`
+  version: `2.0.${buildNumber}`
 };
 
 const filepath = path.join(__dirname, '..', 'src', 'version.json');
