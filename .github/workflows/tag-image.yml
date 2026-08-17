@@ -1,0 +1,42 @@
+name: Tag container image
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_digest:
+        description: "Source image digest, z.B. sha256:3f902cdcca..."
+        required: true
+        type: string
+
+      target_tag:
+        description: "Neuer Image-Tag, z.B. 1.2.3"
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  tag-image:
+    name: Tag existing image
+    runs-on: ubuntu-latest
+
+    permissions:
+      packages: write
+
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
+
+      - name: Login to GHCR
+        run: |
+          crane auth login ${{ env.REGISTRY }} \
+            -u ${{ github.actor }} \
+            -p ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag image
+        run: |
+          crane tag \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ inputs.source_digest }} \
+            ${{ inputs.target_tag }}
