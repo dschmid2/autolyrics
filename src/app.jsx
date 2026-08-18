@@ -26,26 +26,28 @@ function computeLinesWithTimes(song) {
   const timeSigNum = Number(song.timeSigNum) || 4;
   const lines = [];
   let prevTime = 0;
+  const defaultMode = song?.timingMode || 'bar_beat';
 
   for (let i = 0; i < song.lines.length; i++) {
     const l = song.lines[i];
+    const mode = l.mode || defaultMode;
     let t = 0;
-    if (l.mode === 'sec') {
+    if (mode === 'sec') {
       t = Number(l.timeSec) || 0;
-    } else if (l.mode === 'relative') {
+    } else if (mode === 'relative') {
       const rel = Number(l.relativeSec) || 0;
       t = prevTime + rel;
-    } else if (l.mode === 'relative_bar_beat') {
+    } else if (mode === 'relative_bar_beat') {
       const relBar = Number(l.relativeBar) || 0;
       const relBeat = Number(l.relativeBeat) || 0;
       const totalBeats = relBar * timeSigNum + relBeat;
       t = prevTime + totalBeats * (60 / bpm);
-    } else if (l.mode === 'bar_beat') {
+    } else if (mode === 'bar_beat') {
       const bar = Number(l.bar) || 1;
       const beat = Number(l.beat) || 1;
       const totalBeats = (bar - 1) * timeSigNum + (beat - 1);
       t = Math.max(0, totalBeats * (60 / bpm));
-    } else if (l.mode === 'beat') {
+    } else if (mode === 'beat') {
       const beat = Number(l.beat) || 1;
       t = Math.max(0, (beat - 1) * 60 / bpm);
     } else {
@@ -53,7 +55,7 @@ function computeLinesWithTimes(song) {
     }
 
     const duration = l.duration !== undefined && l.duration !== null && l.duration !== '' ? Number(l.duration) : null;
-    lines.push({ ...l, t, duration });
+    lines.push({ ...l, mode, t, duration });
     prevTime = t;
   }
 
@@ -111,7 +113,7 @@ function fmtTimeWithTenths(s) {
 }
 
 function updateLineTimestamp(line, newTime, song, prevLineTime) {
-  const mode = line.mode || 'sec';
+  const mode = line.mode || song?.timingMode || 'bar_beat';
   const bpm = Number(song.bpm) || 90;
   const timeSigNum = Number(song.timeSigNum) || 4;
 
@@ -375,13 +377,24 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
 
   const addMarkerAtCurrentTime = () => {
     const t = Math.round(currentTime * 100) / 100;
+    const defaultMode = song.timingMode || 'bar_beat';
+    let timingPatch = { mode: defaultMode };
+
+    if (defaultMode === 'bar_beat') {
+      const totalBeats = Math.max(0, t * (bpm / 60));
+      const bar = Math.floor(totalBeats / timeSigNum) + 1;
+      const beat = Math.floor(totalBeats % timeSigNum) + 1;
+      timingPatch = { mode: 'bar_beat', bar, beat };
+    } else {
+      timingPatch = { mode: 'sec', timeSec: t };
+    }
+
     const newLine = {
       id: uid(),
       en: '',
       de: '',
-      mode: 'sec',
-      timeSec: t,
-      duration: ''
+      duration: '',
+      ...timingPatch
     };
     onUpdateSong({ lines: [...song.lines, newLine] });
   };
@@ -1437,7 +1450,27 @@ function SongEditor({ song, onChange, onDelete }) {
 
   const update = (patch) => onChange({ ...song, ...patch });
   const updateLine = (id, patch) => update({ lines: song.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
-  const addLine = () => update({ lines: [...song.lines, { id: uid(), en: '', de: '', mode: 'sec', timeSec: 0, beat: '', duration: '' }] });
+
+  const currentTimingMode = song.timingMode || 'bar_beat';
+
+  const handleTimingModeChange = (newMode) => {
+    if (newMode === currentTimingMode) return;
+    const computed = computeLinesWithTimes(song);
+    const updatedLines = song.lines.map((l) => {
+      const comp = computed.find((c) => c.id === l.id);
+      const t = comp ? comp.t : 0;
+      const patch = updateLineTimestamp({ ...l, mode: newMode }, t, song, 0);
+      return { ...l, mode: newMode, ...patch };
+    });
+    update({ timingMode: newMode, lines: updatedLines });
+  };
+
+  const addLine = () => {
+    const defaultMode = song.timingMode || 'bar_beat';
+    const newTimingProps = defaultMode === 'bar_beat' ? { bar: 1, beat: 1 } : { timeSec: 0 };
+    update({ lines: [...song.lines, { id: uid(), en: '', de: '', mode: defaultMode, duration: '', ...newTimingProps }] });
+  };
+
   const removeLine = (id) => update({ lines: song.lines.filter((l) => l.id !== id) });
   const moveLine = (id, dir) => {
     const idx = song.lines.findIndex((l) => l.id === id);
@@ -1516,6 +1549,18 @@ function SongEditor({ song, onChange, onDelete }) {
             <option value="5/4">5/4</option>
           </select>
         </div>
+        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1" style={{ background: COLORS.panelBg2 }}>
+          <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>Positionierung</span>
+          <select
+            value={currentTimingMode}
+            onChange={(e) => handleTimingModeChange(e.target.value)}
+            className="px-1.5 py-1 rounded text-sm bg-white cursor-pointer"
+            style={{ color: COLORS.ink }}
+          >
+            <option value="bar_beat">Takt / Schlag</option>
+            <option value="sec">Zeitbasis (Sekunden)</option>
+          </select>
+        </div>
         <button
           onClick={onDelete}
           aria-label="Song löschen"
@@ -1592,10 +1637,10 @@ function SongEditor({ song, onChange, onDelete }) {
               <input value={l.en} onChange={(e) => updateLine(l.id, { en: e.target.value })} placeholder="Englisch (Haupttext)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
               <input value={l.de} onChange={(e) => updateLine(l.id, { de: e.target.value })} placeholder="Deutsch (Übersetzung)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
               <div className="flex items-center gap-2 flex-wrap text-xs">
-                <select value={l.mode} onChange={(e) => updateLine(l.id, { mode: e.target.value })} className="px-1.5 py-1 rounded bg-white text-xs border border-gray-200" style={{ color: COLORS.ink }}>
+                <select value={l.mode || currentTimingMode} onChange={(e) => updateLine(l.id, { mode: e.target.value })} className="px-1.5 py-1 rounded bg-white text-xs border border-gray-200" style={{ color: COLORS.ink }}>
+                  <option value="bar_beat">Takt / Schlag</option>
                   <option value="sec">Absolut (Sekunden)</option>
                   <option value="relative">Relativ (s seit letzter)</option>
-                  <option value="bar_beat">Takt / Schlag</option>
                   <option value="beat">Schlag absolut</option>
                   <option value="relative_bar_beat">Relativ (Takt / Schlag)</option>
                 </select>
@@ -1668,7 +1713,7 @@ function EditorView({ songs, onChangeSongs, onBack }) {
   const selected = songs.find((s) => s.id === selectedId) || null;
 
   const addSong = () => {
-    const s = { id: uid(), title: 'Neuer Song', bpm: 90, lines: [] };
+    const s = { id: uid(), title: 'Neuer Song', bpm: 90, timingMode: 'bar_beat', lines: [] };
     onChangeSongs([...songs, s]);
     setSelectedId(s.id);
   };
