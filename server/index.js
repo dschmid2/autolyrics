@@ -77,9 +77,10 @@ function loadState() {
     return {
       songs: Array.isArray(parsed.songs) ? parsed.songs : [DEMO_SONG],
       playback: parsed.playback || defaultPlayback(),
+      players: typeof parsed.players === 'object' && parsed.players !== null ? parsed.players : {},
     };
   } catch (e) {
-    return { songs: [DEMO_SONG], playback: defaultPlayback() };
+    return { songs: [DEMO_SONG], playback: defaultPlayback(), players: {} };
   }
 }
 
@@ -106,8 +107,8 @@ app.post('/api/upload', upload.single('audio'), (req, res) => {
   res.json({ url: audioUrl, filename: req.file.filename, originalName: req.file.originalname });
 });
 
-// Routing for direct access to /live and /stage
-app.get(['/live', '/stage'], (req, res) => {
+// Routing for direct access to /live, /stage, and /player
+app.get(['/live', '/stage', '/player'], (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
@@ -122,10 +123,13 @@ function broadcast(msg, exceptWs) {
 }
 
 wss.on('connection', (ws) => {
+  let boundPlayerId = null;
+
   ws.send(JSON.stringify({
     type: 'state',
     songs: state.songs,
     playback: state.playback,
+    players: state.players,
     serverIp: getLocalIpAddress(),
     serverPort: PORT
   }));
@@ -133,6 +137,36 @@ wss.on('connection', (ws) => {
   ws.on('message', (raw) => {
     let msg;
     try { msg = JSON.parse(raw); } catch (e) { return; }
+
+    if (msg.type === 'registerPlayer' && msg.playerId) {
+      boundPlayerId = msg.playerId;
+      const existingRole = state.players[boundPlayerId] ? state.players[boundPlayerId].role : null;
+      state.players[boundPlayerId] = {
+        id: boundPlayerId,
+        role: existingRole || null,
+        lastSeen: Date.now(),
+        online: true,
+      };
+      persist();
+      broadcast({ type: 'players', players: state.players });
+    }
+
+    if (msg.type === 'setPlayerRole' && msg.playerId) {
+      const existing = state.players[msg.playerId] || { id: msg.playerId, online: false };
+      state.players[msg.playerId] = {
+        ...existing,
+        role: msg.role || null,
+        lastSeen: Date.now(),
+      };
+      persist();
+      broadcast({ type: 'players', players: state.players });
+    }
+
+    if (msg.type === 'deletePlayer' && msg.playerId) {
+      delete state.players[msg.playerId];
+      persist();
+      broadcast({ type: 'players', players: state.players });
+    }
 
     if (msg.type === 'setSongs' && Array.isArray(msg.songs)) {
       state.songs = msg.songs;
@@ -143,6 +177,18 @@ wss.on('connection', (ws) => {
       state.playback = { ...msg.playback, updatedAt: Date.now() };
       persist();
       broadcast({ type: 'playback', playback: state.playback }, ws);
+    }
+  });
+
+  ws.on('close', () => {
+    if (boundPlayerId && state.players[boundPlayerId]) {
+      state.players[boundPlayerId] = {
+        ...state.players[boundPlayerId],
+        online: false,
+        lastSeen: Date.now(),
+      };
+      persist();
+      broadcast({ type: 'players', players: state.players });
     }
   });
 });

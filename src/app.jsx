@@ -20,6 +20,19 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+function getOrCreatePlayerId() {
+  try {
+    let id = localStorage.getItem('autolyrics_player_id');
+    if (!id) {
+      id = 'player-' + Math.random().toString(36).substring(2, 8);
+      localStorage.setItem('autolyrics_player_id', id);
+    }
+    return id;
+  } catch (e) {
+    return 'player-' + Math.random().toString(36).substring(2, 8);
+  }
+}
+
 function computeLinesWithTimes(song) {
   if (!song || !Array.isArray(song.lines)) return [];
   const bpm = Number(song.bpm) || 90;
@@ -740,9 +753,11 @@ function computeElapsed(playback) {
 function useSyncedState() {
   const [songs, setSongs] = useState([]);
   const [playback, setPlayback] = useState(defaultPlayback());
+  const [players, setPlayers] = useState({});
   const [connected, setConnected] = useState(false);
   const [serverIp, setServerIp] = useState('');
   const [serverPort, setServerPort] = useState('');
+  const playerIdRef = useRef(getOrCreatePlayerId());
   const wsRef = useRef(null);
 
   useEffect(() => {
@@ -754,7 +769,12 @@ function useSyncedState() {
       const ws = new WebSocket(`${proto}://${location.host}/ws`);
       wsRef.current = ws;
 
-      ws.onopen = () => { if (!cancelled) setConnected(true); };
+      ws.onopen = () => {
+        if (!cancelled) {
+          setConnected(true);
+          ws.send(JSON.stringify({ type: 'registerPlayer', playerId: playerIdRef.current }));
+        }
+      };
       ws.onclose = () => {
         if (cancelled) return;
         setConnected(false);
@@ -767,11 +787,13 @@ function useSyncedState() {
           if (msg.type === 'state') {
             setSongs(msg.songs);
             setPlayback(msg.playback);
+            if (msg.players) setPlayers(msg.players);
             if (msg.serverIp) setServerIp(msg.serverIp);
             if (msg.serverPort) setServerPort(msg.serverPort);
           }
           if (msg.type === 'songs') setSongs(msg.songs);
           if (msg.type === 'playback') setPlayback(msg.playback);
+          if (msg.type === 'players') setPlayers(msg.players);
         } catch (e) {}
       };
     }
@@ -799,7 +821,31 @@ function useSyncedState() {
     }
   }, []);
 
-  return { songs, playback, connected, sendSongs, sendPlayback, serverIp, serverPort };
+  const sendPlayerRole = useCallback((targetPlayerId, role) => {
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'setPlayerRole', playerId: targetPlayerId, role }));
+    }
+  }, []);
+
+  const sendDeletePlayer = useCallback((targetPlayerId) => {
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'deletePlayer', playerId: targetPlayerId }));
+    }
+  }, []);
+
+  return {
+    songs,
+    playback,
+    players,
+    connected,
+    playerId: playerIdRef.current,
+    sendSongs,
+    sendPlayback,
+    sendPlayerRole,
+    sendDeletePlayer,
+    serverIp,
+    serverPort,
+  };
 }
 
 function useElapsed(playback) {
@@ -957,6 +1003,30 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
               />
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnassignedPlayerView({ playerId }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center select-none" style={{ background: COLORS.stageBg, color: COLORS.stageText }}>
+      <div className="max-w-md w-full p-8 rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-2xl space-y-6">
+        <div className="w-16 h-16 mx-auto rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+          <QrCode size={32} />
+        </div>
+
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold tracking-tight text-white">Player registriert</h2>
+          <p className="text-sm text-zinc-400">
+            Zuweisung fehlt noch. Bitte in der Steuerung eine Rolle (Stage oder Live) zuweisen.
+          </p>
+        </div>
+
+        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Player ID</div>
+          <div className="text-lg font-mono font-bold text-amber-400 select-all">{playerId}</div>
         </div>
       </div>
     </div>
@@ -1193,16 +1263,40 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
   );
 }
 
-function ControlView({ songs, playback, elapsed, serverIp, serverPort, onLoad, onTogglePlay, onStop, onSeek, onNudge, onChangePlayback, onGotoEditor, onGotoProjection, onGotoOptions, onGotoStage }) {
+function ControlView({
+  songs,
+  playback,
+  players = {},
+  localPlayerId,
+  onSetPlayerRole,
+  onDeletePlayer,
+  elapsed,
+  serverIp,
+  serverPort,
+  onLoad,
+  onTogglePlay,
+  onStop,
+  onSeek,
+  onNudge,
+  onChangePlayback,
+  onGotoEditor,
+  onGotoProjection,
+  onGotoOptions,
+  onGotoStage
+}) {
   const song = songs.find((s) => s.id === playback.songId) || null;
   const lines = song ? sortedLines(song) : [];
   const idx = song ? currentIndex(lines, elapsed) : -1;
   const duration = getSongDuration(lines);
 
   const [showQrSection, setShowQrSection] = useState(false);
+  const [showPlayersSection, setShowPlayersSection] = useState(true);
   const [qrBaseUrl, setQrBaseUrl] = useState('');
+  const [playerQr, setPlayerQr] = useState('');
   const [liveQr, setLiveQr] = useState('');
   const [stageQr, setStageQr] = useState('');
+
+  const playerList = Object.values(players);
 
   useEffect(() => {
     let host = window.location.hostname;
@@ -1221,8 +1315,13 @@ function ControlView({ songs, playback, elapsed, serverIp, serverPort, onLoad, o
 
   useEffect(() => {
     if (!qrBaseUrl) return;
+    const playerUrl = `${qrBaseUrl}/player`;
     const liveUrl = `${qrBaseUrl}/live`;
     const stageUrl = `${qrBaseUrl}/stage`;
+
+    QRCode.toDataURL(playerUrl, { width: 160, margin: 1 })
+      .then(url => setPlayerQr(url))
+      .catch(err => console.error(err));
 
     QRCode.toDataURL(liveUrl, { width: 160, margin: 1 })
       .then(url => setLiveQr(url))
@@ -1327,61 +1426,151 @@ function ControlView({ songs, playback, elapsed, serverIp, serverPort, onLoad, o
           </button>
         </div>
 
-        <div className="pt-4 border-t" style={{ borderColor: COLORS.line }}>
-          <button
-            onClick={() => setShowQrSection(!showQrSection)}
-            className="w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-between"
-            style={{ background: COLORS.panelBg2, color: COLORS.ink }}
-          >
-            <span className="flex items-center gap-1.5">
-              <QrCode size={16} /> QR-Codes für Mobilgeräte
-            </span>
-            {showQrSection ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
+        <div className="pt-4 border-t space-y-3" style={{ borderColor: COLORS.line }}>
+          {/* Player Management Section */}
+          <div>
+            <button
+              onClick={() => setShowPlayersSection(!showPlayersSection)}
+              className="w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-between"
+              style={{ background: COLORS.panelBg2, color: COLORS.ink }}
+            >
+              <span className="flex items-center gap-1.5 font-bold">
+                Player-Verwaltung ({playerList.length})
+              </span>
+              {showPlayersSection ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
 
-          {showQrSection && (
-            <div className="mt-3 space-y-4 p-3 rounded-xl" style={{ background: COLORS.panelBg2 }}>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold block" style={{ color: COLORS.inkDim }}>
-                  Ziel-URL / IP anpassen:
-                </label>
-                <input
-                  type="text"
-                  value={qrBaseUrl}
-                  onChange={(e) => setQrBaseUrl(e.target.value)}
-                  placeholder="http://192.168.1.50:8080"
-                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-300"
-                  style={{ background: '#fff', color: COLORS.ink }}
-                />
+            {showPlayersSection && (
+              <div className="mt-2 space-y-2 p-3 rounded-xl" style={{ background: COLORS.panelBg2 }}>
+                {playerList.length === 0 ? (
+                  <div className="text-xs italic text-center py-2" style={{ color: COLORS.inkDim }}>
+                    Keine Player verbunden. Scanne den QR-Code auf ein Gerät, um sich zu verbinden.
+                  </div>
+                ) : (
+                  playerList.map((p) => {
+                    const isSelf = p.id === localPlayerId;
+                    return (
+                      <div key={p.id} className="p-2.5 rounded-lg bg-white shadow-sm space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2.5 h-2.5 rounded-full ${p.online ? 'bg-emerald-500' : 'bg-zinc-400'}`} title={p.online ? 'Online' : 'Offline'} />
+                            <span className="font-mono text-xs font-bold" style={{ color: COLORS.ink }}>
+                              {p.id} {isSelf && <span className="text-[10px] font-normal text-amber-600">(Dieses Gerät)</span>}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => onDeletePlayer(p.id)}
+                            className="p-1 rounded hover:bg-red-100 text-red-600 transition-colors"
+                            title="Player entfernen"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] font-medium mr-1" style={{ color: COLORS.inkDim }}>Rolle:</span>
+                          <button
+                            onClick={() => onSetPlayerRole(p.id, 'live')}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                              p.role === 'live' ? 'bg-amber-500 text-black font-bold shadow-sm' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                            }`}
+                          >
+                            Live
+                          </button>
+                          <button
+                            onClick={() => onSetPlayerRole(p.id, 'stage')}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                              p.role === 'stage' ? 'bg-amber-500 text-black font-bold shadow-sm' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                            }`}
+                          >
+                            Stage
+                          </button>
+                          <button
+                            onClick={() => onSetPlayerRole(p.id, null)}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                              !p.role ? 'bg-zinc-700 text-white font-bold' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                            }`}
+                          >
+                            Keine
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
+            )}
+          </div>
 
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
-                  <span className="text-xs font-bold mb-1" style={{ color: COLORS.ink }}>Live (Projection)</span>
-                  {liveQr ? (
-                    <img src={liveQr} alt="QR Code Live" className="w-32 h-32 object-contain" />
-                  ) : (
-                    <div className="w-32 h-32 flex items-center justify-center text-xs text-gray-400">Lädt...</div>
-                  )}
-                  <a href={`${qrBaseUrl}/live`} target="_blank" rel="noreferrer" className="text-[10px] mt-1 text-amber-600 underline truncate max-w-full">
-                    /live öffnen
-                  </a>
+          {/* QR Codes Section */}
+          <div>
+            <button
+              onClick={() => setShowQrSection(!showQrSection)}
+              className="w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-between"
+              style={{ background: COLORS.panelBg2, color: COLORS.ink }}
+            >
+              <span className="flex items-center gap-1.5">
+                <QrCode size={16} /> QR-Codes für Mobilgeräte
+              </span>
+              {showQrSection ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+
+            {showQrSection && (
+              <div className="mt-3 space-y-4 p-3 rounded-xl" style={{ background: COLORS.panelBg2 }}>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold block" style={{ color: COLORS.inkDim }}>
+                    Ziel-URL / IP anpassen:
+                  </label>
+                  <input
+                    type="text"
+                    value={qrBaseUrl}
+                    onChange={(e) => setQrBaseUrl(e.target.value)}
+                    placeholder="http://192.168.1.50:8080"
+                    className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-300"
+                    style={{ background: '#fff', color: COLORS.ink }}
+                  />
                 </div>
 
-                <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
-                  <span className="text-xs font-bold mb-1" style={{ color: COLORS.ink }}>Stageview (Bühne)</span>
-                  {stageQr ? (
-                    <img src={stageQr} alt="QR Code Stage" className="w-32 h-32 object-contain" />
-                  ) : (
-                    <div className="w-32 h-32 flex items-center justify-center text-xs text-gray-400">Lädt...</div>
-                  )}
-                  <a href={`${qrBaseUrl}/stage`} target="_blank" rel="noreferrer" className="text-[10px] mt-1 text-amber-600 underline truncate max-w-full">
-                    /stage öffnen
-                  </a>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
+                    <span className="text-[11px] font-bold mb-1" style={{ color: COLORS.ink }}>Player (Auto)</span>
+                    {playerQr ? (
+                      <img src={playerQr} alt="QR Code Player" className="w-24 h-24 object-contain" />
+                    ) : (
+                      <div className="w-24 h-24 flex items-center justify-center text-xs text-gray-400">Lädt...</div>
+                    )}
+                    <a href={`${qrBaseUrl}/player`} target="_blank" rel="noreferrer" className="text-[9px] mt-1 text-amber-600 underline truncate max-w-full">
+                      /player öffnen
+                    </a>
+                  </div>
+
+                  <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
+                    <span className="text-[11px] font-bold mb-1" style={{ color: COLORS.ink }}>Live (Direkt)</span>
+                    {liveQr ? (
+                      <img src={liveQr} alt="QR Code Live" className="w-24 h-24 object-contain" />
+                    ) : (
+                      <div className="w-24 h-24 flex items-center justify-center text-xs text-gray-400">Lädt...</div>
+                    )}
+                    <a href={`${qrBaseUrl}/live`} target="_blank" rel="noreferrer" className="text-[9px] mt-1 text-amber-600 underline truncate max-w-full">
+                      /live öffnen
+                    </a>
+                  </div>
+
+                  <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
+                    <span className="text-[11px] font-bold mb-1" style={{ color: COLORS.ink }}>Stage (Direkt)</span>
+                    {stageQr ? (
+                      <img src={stageQr} alt="QR Code Stage" className="w-24 h-24 object-contain" />
+                    ) : (
+                      <div className="w-24 h-24 flex items-center justify-center text-xs text-gray-400">Lädt...</div>
+                    )}
+                    <a href={`${qrBaseUrl}/stage`} target="_blank" rel="noreferrer" className="text-[9px] mt-1 text-amber-600 underline truncate max-w-full">
+                      /stage öffnen
+                    </a>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -1748,11 +1937,26 @@ export default function App() {
     const path = window.location.pathname;
     if (path === '/live') return 'projection';
     if (path === '/stage') return 'stage';
+    if (path === '/player') return 'player';
     return 'control';
   });
 
-  const { songs, playback, connected, sendSongs, sendPlayback, serverIp, serverPort } = useSyncedState();
+  const {
+    songs,
+    playback,
+    players,
+    connected,
+    playerId,
+    sendSongs,
+    sendPlayback,
+    sendPlayerRole,
+    sendDeletePlayer,
+    serverIp,
+    serverPort
+  } = useSyncedState();
   const elapsed = useElapsed(playback);
+
+  const localPlayer = players[playerId] || null;
 
   // Sync state view changes with the browser URL (via history pushState)
   const changeView = (nextView) => {
@@ -1761,6 +1965,8 @@ export default function App() {
       window.history.pushState(null, '', '/live');
     } else if (nextView === 'stage') {
       window.history.pushState(null, '', '/stage');
+    } else if (nextView === 'player') {
+      window.history.pushState(null, '', '/player');
     } else if (nextView === 'control') {
       window.history.pushState(null, '', '/');
     }
@@ -1771,6 +1977,7 @@ export default function App() {
       const path = window.location.pathname;
       if (path === '/live') setView('projection');
       else if (path === '/stage') setView('stage');
+      else if (path === '/player') setView('player');
       else setView('control');
     };
     window.addEventListener('popstate', handlePopState);
@@ -1798,7 +2005,15 @@ export default function App() {
         @media (prefers-reduced-motion: reduce) { .choir-beat-dot { animation: none; opacity: .3; } }
         button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid ${COLORS.amber}; outline-offset: 2px; }
       `}</style>
-      {view === 'projection' ? (
+      {view === 'player' ? (
+        localPlayer && localPlayer.role === 'live' ? (
+          <ProjectionView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} connected={connected} />
+        ) : localPlayer && localPlayer.role === 'stage' ? (
+          <StageView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} />
+        ) : (
+          <UnassignedPlayerView playerId={playerId} />
+        )
+      ) : view === 'projection' ? (
         <ProjectionView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} connected={connected} />
       ) : view === 'stage' ? (
         <StageView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} />
@@ -1810,6 +2025,10 @@ export default function App() {
         <ControlView
           songs={songs}
           playback={playback}
+          players={players}
+          localPlayerId={playerId}
+          onSetPlayerRole={sendPlayerRole}
+          onDeletePlayer={sendDeletePlayer}
           elapsed={elapsed}
           serverIp={serverIp}
           serverPort={serverPort}
