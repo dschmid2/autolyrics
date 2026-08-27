@@ -62,11 +62,12 @@ const DEMO_SONG = {
   id: 'demo-1',
   title: 'Demo-Song (Platzhalter)',
   bpm: 84,
+  timingMode: 'bar_beat',
   lines: [
-    { id: 'l1', en: 'This is the first line of the demo', de: 'Dies ist die erste Zeile der Demo', mode: 'sec', timeSec: 0, beat: '' },
-    { id: 'l2', en: 'Edit these lines in the song editor', de: 'Bearbeite diese Zeilen im Song-Editor', mode: 'sec', timeSec: 6, beat: '' },
-    { id: 'l3', en: 'Timing can use seconds or beat numbers', de: 'Die Zeit kann in Sekunden oder Taktschlägen angegeben werden', mode: 'beat', timeSec: '', beat: 13 },
-    { id: 'l4', en: 'Tap a line on the control screen to jump there', de: 'Tippe auf der Steuerung eine Zeile an, um dorthin zu springen', mode: 'sec', timeSec: 18, beat: '' },
+    { id: 'l1', en: 'This is the first line of the demo', de: 'Dies ist die erste Zeile der Demo', mode: 'bar_beat', bar: 1, beat: 1 },
+    { id: 'l2', en: 'Edit these lines in the song editor', de: 'Bearbeite diese Zeilen im Song-Editor', mode: 'bar_beat', bar: 3, beat: 1 },
+    { id: 'l3', en: 'Timing can use seconds or beat numbers', de: 'Die Zeit kann in Sekunden oder Taktschlägen angegeben werden', mode: 'bar_beat', bar: 5, beat: 3 },
+    { id: 'l4', en: 'Tap a line on the control screen to jump there', de: 'Tippe auf der Steuerung eine Zeile an, um dorthin zu springen', mode: 'bar_beat', bar: 7, beat: 1 },
   ],
 };
 
