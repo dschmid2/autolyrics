@@ -1022,7 +1022,7 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
 
 function UnassignedPlayerView({ playerId }) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center select-none" style={{ background: COLORS.stageBg, color: COLORS.stageText }}>
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center select-none cursor-none" style={{ background: COLORS.stageBg, color: COLORS.stageText }}>
       <div className="max-w-md w-full p-8 rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-2xl space-y-6">
         <div className="w-16 h-16 mx-auto rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
           <QrCode size={32} />
@@ -1104,7 +1104,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
   }
 
   return (
-    <div ref={containerRef} className="fixed inset-0 select-none flex flex-col justify-center items-center px-6 overflow-hidden" style={{ background: COLORS.stageBg }}>
+    <div ref={containerRef} className="fixed inset-0 select-none cursor-none flex flex-col justify-center items-center px-6 overflow-hidden" style={{ background: COLORS.stageBg }}>
       <div className="flex flex-col items-center justify-center text-center w-full max-w-5xl space-y-6 md:space-y-8">
         {items.map((item) => {
           if (!item.line) {
@@ -1218,7 +1218,7 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
   };
 
   return (
-    <div ref={containerRef} className="fixed inset-0 select-none" style={{ background: COLORS.stageBg }}>
+    <div ref={containerRef} className="fixed inset-0 select-none cursor-none" style={{ background: COLORS.stageBg }}>
       {line && (
         <div
           className="absolute flex flex-col items-center gap-6 px-10 text-center max-w-6xl pointer-events-none"
@@ -1260,7 +1260,7 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
       <button
         onClick={onExit}
         aria-label="Zurück zur Steuerung"
-        className="fixed top-0 right-0 w-24 h-24 bg-transparent border-0 outline-none z-50 cursor-default focus:opacity-0"
+        className="fixed top-0 right-0 w-24 h-24 bg-transparent border-0 outline-none z-50 focus:opacity-0"
         style={{ WebkitTapHighlightColor: 'transparent' }}
       />
 
