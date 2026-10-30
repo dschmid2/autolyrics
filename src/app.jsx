@@ -799,6 +799,7 @@ function defaultPlayback() {
     anchorElapsed: 0,
     updatedAt: Date.now(),
     fontSize: 64,
+    stageFontSize: 64,
     translationPercent: 60,
     positionX: 50,
     positionY: 50,
@@ -1025,6 +1026,21 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
 
           <div className="border-t pt-3 mt-3 space-y-3" style={{ borderColor: COLORS.line }}>
             <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.ink }}>Stage-View Optionen</h3>
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Schriftgrösse (Stage-View)</span>
+                <span className="font-mono">{playback.stageFontSize !== undefined ? playback.stageFontSize : (playback.fontSize !== undefined ? playback.fontSize : 64)}px</span>
+              </div>
+              <input
+                type="range"
+                min="20"
+                max="120"
+                value={playback.stageFontSize !== undefined ? playback.stageFontSize : (playback.fontSize !== undefined ? playback.fontSize : 64)}
+                onChange={(e) => onChangePlayback({ stageFontSize: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
@@ -1079,8 +1095,8 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
               </div>
               <input
                 type="range"
-                min="10"
-                max="50"
+                min="0"
+                max="100"
                 value={playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20}
                 onChange={(e) => onChangePlayback({ stageCommentWidthPercent: Number(e.target.value) })}
                 className="w-full accent-amber"
@@ -1130,10 +1146,12 @@ function StageView({ songs, playback, elapsed, onExit }) {
   const song = songs.find((s) => s.id === playback.songId) || null;
   const lines = song ? sortedLines(song) : [];
   const stageLeadSeconds = playback.stageLeadSeconds !== undefined ? playback.stageLeadSeconds : 0;
+  const stagePastLines = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
+  const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
   const idx = song ? currentIndex(lines, elapsed + stageLeadSeconds) : -1;
   const currentIdx = idx >= 0 ? idx : 0;
 
-  const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
+  const stageFontSize = playback.stageFontSize !== undefined ? playback.stageFontSize : (playback.fontSize !== undefined ? playback.fontSize : 64);
   const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
   const commentPercent = playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20;
 
@@ -1146,7 +1164,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
     }
   };
 
-  const lineRowHeight = Math.max(60, fontSize * 1.6);
+  const lineRowHeight = Math.max(60, stageFontSize * 1.6);
 
   return (
     <div
@@ -1155,6 +1173,14 @@ function StageView({ songs, playback, elapsed, onExit }) {
       style={{ background: COLORS.stageBg }}
     >
       <div className="relative w-full max-w-6xl h-full flex items-center justify-center overflow-hidden">
+        {/* Durchgehende vertikale Trennlinie */}
+        {commentPercent > 0 && commentPercent < 100 && (
+          <div
+            className="absolute top-0 bottom-0 w-px bg-zinc-800 z-10 pointer-events-none opacity-60"
+            style={{ left: `${commentPercent}%` }}
+          />
+        )}
+
         {/* Animated scrolling container */}
         <div
           className="w-full flex flex-col items-center transition-transform duration-500 ease-out"
@@ -1167,7 +1193,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
               style={{
                 color: COLORS.stageTextDim,
                 fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
-                fontSize: `${fontSize * 0.75}px`
+                fontSize: `${stageFontSize * 0.75}px`
               }}
               className="text-center opacity-40"
             >
@@ -1177,48 +1203,72 @@ function StageView({ songs, playback, elapsed, onExit }) {
             lines.map((l, i) => {
               const isCurrent = i === currentIdx;
               const isPast = i < currentIdx;
+              const isVisible = i >= currentIdx - stagePastLines && i <= currentIdx + stageFutureLines;
+
+              if (commentPercent === 0) {
+                return (
+                  <div
+                    key={l.id}
+                    style={{
+                      height: `${lineRowHeight}px`
+                    }}
+                    className={`flex items-center w-full justify-start shrink-0 transition-opacity duration-500 ${
+                      !isVisible ? 'opacity-0 pointer-events-none' : ''
+                    }`}
+                  >
+                    <div
+                      style={{
+                        color: isCurrent ? COLORS.stageText : COLORS.stageTextDim,
+                        fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
+                        fontSize: `${isCurrent ? stageFontSize : stageFontSize * 0.7}px`,
+                        lineHeight: '1.2'
+                      }}
+                      className={`text-left transition-all duration-500 ${
+                        !isVisible ? 'opacity-0' : isCurrent ? 'font-bold scale-[1.02] opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
+                      }`}
+                    >
+                      {l.en}
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <div
                   key={l.id}
                   style={{
                     height: `${lineRowHeight}px`,
-                    gridTemplateColumns: `${commentPercent}% auto 1fr`
+                    gridTemplateColumns: `${commentPercent}% 1fr`
                   }}
-                  className="grid items-center w-full gap-4 md:gap-6 shrink-0"
+                  className={`grid items-center w-full shrink-0 transition-opacity duration-500 ${
+                    !isVisible ? 'opacity-0 pointer-events-none' : ''
+                  }`}
                 >
                   {/* Left Column: Comment (Right-aligned) */}
                   <div
                     style={{
                       color: isCurrent ? COLORS.amber : COLORS.stageTextDim,
                       fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-                      fontSize: `${isCurrent ? fontSize * 0.5 : fontSize * 0.38}px`,
+                      fontSize: `${isCurrent ? stageFontSize * 0.5 : stageFontSize * 0.38}px`,
                       lineHeight: '1.2'
                     }}
-                    className={`text-right font-medium pr-2 transition-all duration-500 ${
-                      isCurrent ? 'opacity-100 font-bold' : isPast ? 'opacity-25' : 'opacity-40'
+                    className={`text-right font-medium pr-4 md:pr-6 transition-all duration-500 ${
+                      !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100 font-bold' : isPast ? 'opacity-25' : 'opacity-40'
                     }`}
                   >
                     {l.comment || ''}
                   </div>
-
-                  {/* Vertical Dividing Line */}
-                  <div
-                    className={`w-0.5 rounded-full transition-all duration-500 ${
-                      isCurrent ? 'bg-amber-500 h-10 shadow-[0_0_10px_#d89a3e]' : 'bg-zinc-800 h-6 opacity-40'
-                    }`}
-                  />
 
                   {/* Right Column: Lyrics (Left-aligned) */}
                   <div
                     style={{
                       color: isCurrent ? COLORS.stageText : COLORS.stageTextDim,
                       fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
-                      fontSize: `${isCurrent ? fontSize : fontSize * 0.7}px`,
+                      fontSize: `${isCurrent ? stageFontSize : stageFontSize * 0.7}px`,
                       lineHeight: '1.2'
                     }}
-                    className={`text-left pl-2 transition-all duration-500 ${
-                      isCurrent ? 'font-bold scale-[1.02] opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
+                    className={`text-left pl-4 md:pl-6 transition-all duration-500 ${
+                      !isVisible ? 'opacity-0' : isCurrent ? 'font-bold scale-[1.02] opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
                     }`}
                   >
                     {l.en}
