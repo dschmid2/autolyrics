@@ -20,6 +20,50 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+function parsePlaintextSongLines(plaintext) {
+  if (!plaintext) return [];
+  const rawLines = plaintext.split(/\r?\n/);
+  const lines = [];
+  let barIndex = 1;
+
+  for (let i = 0; i < rawLines.length; i++) {
+    let lineStr = rawLines[i].trim();
+    if (!lineStr) continue;
+
+    let stageOnly = false;
+    if (lineStr.startsWith('*')) {
+      stageOnly = true;
+      lineStr = lineStr.slice(1).trim();
+    }
+
+    let comment = '';
+    const bracketMatch = lineStr.match(/^\[(.*?)\]\s*(.*)$/);
+    if (bracketMatch) {
+      comment = bracketMatch[1].trim();
+      lineStr = bracketMatch[2].trim();
+    }
+
+    if (!stageOnly && lineStr.startsWith('*')) {
+      stageOnly = true;
+      lineStr = lineStr.slice(1).trim();
+    }
+
+    lines.push({
+      id: uid(),
+      en: lineStr,
+      de: '',
+      mode: 'bar_beat',
+      bar: barIndex,
+      beat: 1,
+      duration: '',
+      stageOnly,
+      comment,
+    });
+    barIndex++;
+  }
+  return lines;
+}
+
 function generateGuid() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -761,7 +805,8 @@ function defaultPlayback() {
     showHeartbeat: true,
     stagePastLines: 2,
     stageFutureLines: 2,
-    stageLeadSeconds: 0
+    stageLeadSeconds: 0,
+    stageCommentWidthPercent: 20
   };
 }
 
@@ -1026,6 +1071,21 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
                 className="w-full accent-amber"
               />
             </div>
+
+            <div className="space-y-1 pt-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Breite Kommentarspalte (Stage-View)</span>
+                <span className="font-mono">{playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20}%</span>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="50"
+                value={playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20}
+                onChange={(e) => onChangePlayback({ stageCommentWidthPercent: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -1075,8 +1135,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
 
   const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
   const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
-  const pastCount = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
-  const futureCount = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
+  const commentPercent = playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20;
 
   const pulseDuration = song ? 60 / (song.bpm || 60) : 1;
   const containerRef = useRef(null);
@@ -1087,81 +1146,88 @@ function StageView({ songs, playback, elapsed, onExit }) {
     }
   };
 
-  const items = [];
-
-  // Vergangene Zeilen
-  for (let i = pastCount; i >= 1; i--) {
-    const lineIdx = currentIdx - i;
-    if (lineIdx >= 0 && lineIdx < lines.length) {
-      items.push({ line: lines[lineIdx], isCurrent: false, key: `past-${lineIdx}` });
-    } else {
-      items.push({ line: null, isCurrent: false, key: `past-empty-${i}` });
-    }
-  }
-
-  // Aktuelle Zeile
-  if (lines.length > 0) {
-    items.push({ line: lines[currentIdx], isCurrent: true, key: `current-${currentIdx}` });
-  } else {
-    items.push({ line: null, isCurrent: false, key: 'current-empty' });
-  }
-
-  // Zukünftige Zeilen
-  for (let i = 1; i <= futureCount; i++) {
-    const lineIdx = currentIdx + i;
-    if (lineIdx >= 0 && lineIdx < lines.length) {
-      items.push({ line: lines[lineIdx], isCurrent: false, key: `future-${lineIdx}` });
-    } else {
-      items.push({ line: null, isCurrent: false, key: `future-empty-${i}` });
-    }
-  }
+  const lineRowHeight = Math.max(60, fontSize * 1.6);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 select-none cursor-none flex flex-col justify-center items-center px-6 overflow-hidden" style={{ background: COLORS.stageBg }}>
-      <div className="flex flex-col items-center justify-center text-center w-full max-w-5xl space-y-6 md:space-y-8">
-        {items.map((item) => {
-          if (!item.line) {
-            return (
-              <div
-                key={item.key}
-                style={{ height: `${fontSize * 1.2}px` }}
-                className="w-full shrink-0"
-              />
-            );
-          }
+    <div
+      ref={containerRef}
+      className="fixed inset-0 select-none cursor-none flex flex-col justify-center items-center px-6 overflow-hidden"
+      style={{ background: COLORS.stageBg }}
+    >
+      <div className="relative w-full max-w-6xl h-full flex items-center justify-center overflow-hidden">
+        {/* Animated scrolling container */}
+        <div
+          className="w-full flex flex-col items-center transition-transform duration-500 ease-out"
+          style={{
+            transform: `translateY(${-currentIdx * lineRowHeight}px)`
+          }}
+        >
+          {lines.length === 0 ? (
+            <div
+              style={{
+                color: COLORS.stageTextDim,
+                fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
+                fontSize: `${fontSize * 0.75}px`
+              }}
+              className="text-center opacity-40"
+            >
+              — Kein Song geladen —
+            </div>
+          ) : (
+            lines.map((l, i) => {
+              const isCurrent = i === currentIdx;
+              const isPast = i < currentIdx;
 
-          if (item.isCurrent) {
-            return (
-              <div
-                key={item.key}
-                style={{
-                  color: COLORS.stageText,
-                  fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
-                  fontSize: `${fontSize}px`,
-                  lineHeight: '1.2'
-                }}
-                className="font-bold w-full transition-all duration-300 transform scale-105 shrink-0"
-              >
-                {item.line.en}
-              </div>
-            );
-          } else {
-            return (
-              <div
-                key={item.key}
-                style={{
-                  color: COLORS.stageTextDim,
-                  fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
-                  fontSize: `${fontSize * 0.75}px`,
-                  lineHeight: '1.2'
-                }}
-                className="font-normal w-full opacity-40 transition-all duration-300 shrink-0"
-              >
-                {item.line.en}
-              </div>
-            );
-          }
-        })}
+              return (
+                <div
+                  key={l.id}
+                  style={{
+                    height: `${lineRowHeight}px`,
+                    gridTemplateColumns: `${commentPercent}% auto 1fr`
+                  }}
+                  className="grid items-center w-full gap-4 md:gap-6 shrink-0"
+                >
+                  {/* Left Column: Comment (Right-aligned) */}
+                  <div
+                    style={{
+                      color: isCurrent ? COLORS.amber : COLORS.stageTextDim,
+                      fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+                      fontSize: `${isCurrent ? fontSize * 0.5 : fontSize * 0.38}px`,
+                      lineHeight: '1.2'
+                    }}
+                    className={`text-right font-medium pr-2 transition-all duration-500 ${
+                      isCurrent ? 'opacity-100 font-bold' : isPast ? 'opacity-25' : 'opacity-40'
+                    }`}
+                  >
+                    {l.comment || ''}
+                  </div>
+
+                  {/* Vertical Dividing Line */}
+                  <div
+                    className={`w-0.5 rounded-full transition-all duration-500 ${
+                      isCurrent ? 'bg-amber-500 h-10 shadow-[0_0_10px_#d89a3e]' : 'bg-zinc-800 h-6 opacity-40'
+                    }`}
+                  />
+
+                  {/* Right Column: Lyrics (Left-aligned) */}
+                  <div
+                    style={{
+                      color: isCurrent ? COLORS.stageText : COLORS.stageTextDim,
+                      fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
+                      fontSize: `${isCurrent ? fontSize : fontSize * 0.7}px`,
+                      lineHeight: '1.2'
+                    }}
+                    className={`text-left pl-2 transition-all duration-500 ${
+                      isCurrent ? 'font-bold scale-[1.02] opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
+                    }`}
+                  >
+                    {l.en}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {song && playback.status === 'playing' && showHeartbeat && (
@@ -1214,7 +1280,8 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
   const duration = getSongDuration(lines);
   const isSongCompleted = song && elapsed >= duration;
   const idx = showText ? currentIndex(lines, elapsed) : -1;
-  const line = idx >= 0 ? lines[idx] : null;
+  const activeLine = idx >= 0 ? lines[idx] : null;
+  const line = (activeLine && !activeLine.stageOnly) ? activeLine : null;
   const pulseDuration = song ? 60 / (song.bpm || 60) : 1;
   const containerRef = useRef(null);
 
@@ -1605,6 +1672,10 @@ function ImportExport({ songs, onImport }) {
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState('replace');
+  const [importFormat, setImportFormat] = useState('json');
+  const [songTitle, setSongTitle] = useState('Neuer Song');
+  const [bpm, setBpm] = useState(90);
+
   const exportText = JSON.stringify(songs, null, 2);
 
   const doCopy = async () => {
@@ -1612,12 +1683,28 @@ function ImportExport({ songs, onImport }) {
   };
   const doImport = () => {
     try {
+      if (importFormat === 'plaintext') {
+        const parsedLines = parsePlaintextSongLines(text);
+        if (!parsedLines.length) throw new Error('Keine gültigen Textzeilen gefunden');
+        const newSong = {
+          id: uid(),
+          title: songTitle.trim() || 'Neuer Song',
+          bpm: Number(bpm) || 90,
+          timeSigNum: 4,
+          timingMode: 'bar_beat',
+          lines: parsedLines,
+        };
+        onImport(mode === 'replace' ? [newSong] : [...songs, newSong]);
+        setText('');
+        return;
+      }
+
       const parsed = JSON.parse(text);
       if (!Array.isArray(parsed)) throw new Error('erwartet ein Array von Songs');
       const withIds = parsed.map((s) => ({ ...s, id: s.id || uid(), lines: (s.lines || []).map((l) => ({ ...l, id: l.id || uid() })) }));
       onImport(mode === 'replace' ? withIds : [...songs, ...withIds]);
       setText('');
-    } catch (e) { alert('JSON ungültig: ' + e.message); }
+    } catch (e) { alert('Import-Fehler: ' + e.message); }
   };
   const onFile = (e) => {
     const file = e.target.files[0];
@@ -1629,13 +1716,59 @@ function ImportExport({ songs, onImport }) {
 
   return (
     <div className="space-y-3 pt-4 mt-4 border-t" style={{ borderColor: COLORS.panelBg2 }}>
-      <div className="text-xs uppercase tracking-wide" style={{ color: COLORS.inkDim }}>Import / Export</div>
+      <div className="text-xs uppercase tracking-wide font-bold" style={{ color: COLORS.inkDim }}>Import / Export</div>
       <button onClick={doCopy} className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>
         {copied ? <Check size={12} /> : <Copy size={12} />} Alle Songs als JSON kopieren
       </button>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="JSON hier einfügen zum Importieren…" rows={5} className="w-full text-xs rounded-lg p-2 font-mono" style={{ background: COLORS.panelBg2, color: COLORS.ink }} />
+
+      <div className="flex gap-2 border-b pb-2 text-xs" style={{ borderColor: COLORS.line }}>
+        <button
+          onClick={() => setImportFormat('json')}
+          className={`px-3 py-1 rounded-lg font-medium transition-colors ${importFormat === 'json' ? 'bg-amber-500 text-black font-bold' : 'bg-zinc-200 text-zinc-700'}`}
+        >
+          JSON Import
+        </button>
+        <button
+          onClick={() => setImportFormat('plaintext')}
+          className={`px-3 py-1 rounded-lg font-medium transition-colors ${importFormat === 'plaintext' ? 'bg-amber-500 text-black font-bold' : 'bg-zinc-200 text-zinc-700'}`}
+        >
+          Klartext Import (.txt)
+        </button>
+      </div>
+
+      {importFormat === 'plaintext' && (
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <input
+            type="text"
+            value={songTitle}
+            onChange={(e) => setSongTitle(e.target.value)}
+            placeholder="Songtitel"
+            className="px-2 py-1.5 rounded-lg border bg-white"
+            style={{ color: COLORS.ink }}
+          />
+          <div className="flex items-center gap-1">
+            <span style={{ color: COLORS.inkDim }}>BPM:</span>
+            <input
+              type="number"
+              value={bpm}
+              onChange={(e) => setBpm(e.target.value)}
+              className="w-20 px-2 py-1.5 rounded-lg border bg-white"
+              style={{ color: COLORS.ink }}
+            />
+          </div>
+        </div>
+      )}
+
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={importFormat === 'plaintext' ? "Klartext hier einfügen...\nJede Zeile entspricht einem Takt.\n*Zeile für Nur-Stageview\n[Solo] Zeile mit Kommentar" : "JSON hier einfügen zum Importieren…"}
+        rows={5}
+        className="w-full text-xs rounded-lg p-2 font-mono"
+        style={{ background: COLORS.panelBg2, color: COLORS.ink }}
+      />
       <div className="flex items-center gap-3 flex-wrap">
-        <input type="file" accept="application/json" onChange={onFile} className="text-xs" style={{ color: COLORS.inkDim }} />
+        <input type="file" accept={importFormat === 'plaintext' ? ".txt,text/plain" : "application/json"} onChange={onFile} className="text-xs" style={{ color: COLORS.inkDim }} />
         <label className="text-xs flex items-center gap-1" style={{ color: COLORS.inkDim }}><input type="radio" checked={mode === 'replace'} onChange={() => setMode('replace')} /> Ersetzen</label>
         <label className="text-xs flex items-center gap-1" style={{ color: COLORS.inkDim }}><input type="radio" checked={mode === 'merge'} onChange={() => setMode('merge')} /> Hinzufügen</label>
         <button onClick={doImport} disabled={!text.trim()} className="text-xs px-3 py-1.5 rounded-full disabled:opacity-40" style={{ background: COLORS.amber, color: '#241a08' }}>Importieren</button>
@@ -1834,8 +1967,33 @@ function SongEditor({ song, onChange, onDelete }) {
           const t = computedLine ? computedLine.t : 0;
           return (
             <div key={l.id} className="rounded-lg p-2 space-y-1" style={{ background: COLORS.panelBg2 }}>
-              <input value={l.en} onChange={(e) => updateLine(l.id, { en: e.target.value })} placeholder="Englisch (Haupttext)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
-              <input value={l.de} onChange={(e) => updateLine(l.id, { de: e.target.value })} placeholder="Deutsch (Übersetzung)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
+              <div className="flex gap-2 items-center">
+                <input
+                  value={l.en}
+                  onChange={(e) => updateLine(l.id, { en: e.target.value })}
+                  placeholder="Englisch / Haupttext"
+                  className="flex-1 px-2 py-1 rounded text-sm"
+                  style={{ background: '#fff', color: COLORS.ink }}
+                />
+                <input
+                  value={l.comment || ''}
+                  onChange={(e) => updateLine(l.id, { comment: e.target.value })}
+                  placeholder="[Kommentar / Solo]"
+                  className="w-36 px-2 py-1 rounded text-xs border border-gray-200"
+                  style={{ background: '#fff', color: COLORS.ink }}
+                  title="Kommentar für Solosänger (wird im Stagedisplay links angezeigt)"
+                />
+                <label className="flex items-center gap-1 text-xs font-medium cursor-pointer whitespace-nowrap" style={{ color: COLORS.inkDim }} title="Nur im Stageview anzeigen (*), nie auf der Projektion">
+                  <input
+                    type="checkbox"
+                    checked={!!l.stageOnly}
+                    onChange={(e) => updateLine(l.id, { stageOnly: e.target.checked })}
+                    className="rounded accent-amber"
+                  />
+                  <span>Nur Stage (*)</span>
+                </label>
+              </div>
+              <input value={l.de || ''} onChange={(e) => updateLine(l.id, { de: e.target.value })} placeholder="Deutsch (Übersetzung)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
               <div className="flex items-center gap-2 flex-wrap text-xs">
                 <select value={l.mode || currentTimingMode} onChange={(e) => updateLine(l.id, { mode: e.target.value })} className="px-1.5 py-1 rounded bg-white text-xs border border-gray-200" style={{ color: COLORS.ink }}>
                   <option value="bar_beat">Takt / Schlag</option>
@@ -1901,9 +2059,25 @@ function SongEditor({ song, onChange, onDelete }) {
           );
         })}
       </div>
-      <button onClick={addLine} className="w-full text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1" style={{ background: COLORS.amber, color: '#241a08' }}>
-        <Plus size={14} /> Zeile hinzufügen
-      </button>
+      <div className="flex gap-2">
+        <button onClick={addLine} className="flex-1 text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1" style={{ background: COLORS.amber, color: '#241a08' }}>
+          <Plus size={14} /> Zeile hinzufügen
+        </button>
+        <button
+          onClick={() => {
+            const txt = prompt('Klartext hier einfügen (jede Zeile = 1 Takt, * = nur Stage, [xxx] = Solo-Kommentar):');
+            if (txt) {
+              const parsed = parsePlaintextSongLines(txt);
+              if (parsed.length) update({ lines: parsed });
+            }
+          }}
+          className="text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1"
+          style={{ background: COLORS.panelBg2, color: COLORS.ink }}
+          title="Klartext als Songzeilen importieren"
+        >
+          Klartext in Song importieren
+        </button>
+      </div>
     </div>
   );
 }
