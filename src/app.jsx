@@ -805,7 +805,8 @@ function defaultPlayback() {
     showHeartbeat: true,
     stagePastLines: 2,
     stageFutureLines: 2,
-    stageLeadSeconds: 0
+    stageLeadSeconds: 0,
+    stageCommentWidthPercent: 20
   };
 }
 
@@ -1070,6 +1071,21 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
                 className="w-full accent-amber"
               />
             </div>
+
+            <div className="space-y-1 pt-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Breite Kommentarspalte (Stage-View)</span>
+                <span className="font-mono">{playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20}%</span>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="50"
+                value={playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20}
+                onChange={(e) => onChangePlayback({ stageCommentWidthPercent: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -1119,6 +1135,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
 
   const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
   const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
+  const commentPercent = playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20;
 
   const pulseDuration = song ? 60 / (song.bpm || 60) : 1;
   const containerRef = useRef(null);
@@ -1164,8 +1181,11 @@ function StageView({ songs, playback, elapsed, onExit }) {
               return (
                 <div
                   key={l.id}
-                  style={{ height: `${lineRowHeight}px` }}
-                  className="grid grid-cols-[1fr_auto_1fr] items-center w-full gap-4 md:gap-6 shrink-0"
+                  style={{
+                    height: `${lineRowHeight}px`,
+                    gridTemplateColumns: `${commentPercent}% auto 1fr`
+                  }}
+                  className="grid items-center w-full gap-4 md:gap-6 shrink-0"
                 >
                   {/* Left Column: Comment (Right-aligned) */}
                   <div
