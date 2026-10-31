@@ -1157,6 +1157,8 @@ function StageView({ songs, playback, elapsed, onExit }) {
 
   const pulseDuration = song ? 60 / (song.bpm || 60) : 1;
   const containerRef = useRef(null);
+  const lineRefs = useRef([]);
+  const [activeCenterOffset, setActiveCenterOffset] = useState(0);
 
   const requestFs = () => {
     if (containerRef.current && containerRef.current.requestFullscreen) {
@@ -1165,6 +1167,24 @@ function StageView({ songs, playback, elapsed, onExit }) {
   };
 
   const lineRowHeight = Math.max(60, stageFontSize * 1.6);
+
+  // Dynamically compute the vertical center of the active line row so wrapped lines push subsequent lines down
+  useEffect(() => {
+    const updateOffset = () => {
+      const activeEl = lineRefs.current[currentIdx];
+      if (activeEl) {
+        const lineTop = activeEl.offsetTop;
+        const lineHeight = activeEl.offsetHeight;
+        setActiveCenterOffset(lineTop + lineHeight / 2);
+      } else {
+        setActiveCenterOffset((currentIdx + 0.5) * lineRowHeight);
+      }
+    };
+
+    updateOffset();
+    window.addEventListener('resize', updateOffset);
+    return () => window.removeEventListener('resize', updateOffset);
+  }, [currentIdx, lines, stageFontSize, commentPercent, lineRowHeight]);
 
   return (
     <div
@@ -1186,7 +1206,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
           className="w-full absolute left-0 flex flex-col items-center transition-transform duration-500 ease-out"
           style={{
             top: '50%',
-            transform: `translateY(calc(-${(currentIdx + 0.5) * lineRowHeight}px))`
+            transform: `translateY(-${activeCenterOffset}px)`
           }}
         >
           {lines.length === 0 ? (
@@ -1210,10 +1230,11 @@ function StageView({ songs, playback, elapsed, onExit }) {
                 return (
                   <div
                     key={l.id}
+                    ref={(el) => { lineRefs.current[i] = el; }}
                     style={{
-                      height: `${lineRowHeight}px`
+                      minHeight: `${lineRowHeight}px`
                     }}
-                    className={`flex items-center w-full justify-start shrink-0 transition-opacity duration-500 ${
+                    className={`flex items-center w-full justify-start shrink-0 py-2 transition-opacity duration-500 ${
                       !isVisible ? 'opacity-0 pointer-events-none' : ''
                     }`}
                   >
@@ -1224,8 +1245,8 @@ function StageView({ songs, playback, elapsed, onExit }) {
                         fontSize: `${isCurrent ? stageFontSize : stageFontSize * 0.7}px`,
                         lineHeight: '1.2'
                       }}
-                      className={`text-left transition-all duration-500 ${
-                        !isVisible ? 'opacity-0' : isCurrent ? 'font-bold scale-[1.02] opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
+                      className={`text-left break-words min-w-0 transition-opacity duration-500 ${
+                        !isVisible ? 'opacity-0' : isCurrent ? 'font-bold opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
                       }`}
                     >
                       {l.en}
@@ -1237,11 +1258,12 @@ function StageView({ songs, playback, elapsed, onExit }) {
               return (
                 <div
                   key={l.id}
+                  ref={(el) => { lineRefs.current[i] = el; }}
                   style={{
-                    height: `${lineRowHeight}px`,
+                    minHeight: `${lineRowHeight}px`,
                     gridTemplateColumns: `${commentPercent}% 1fr`
                   }}
-                  className={`grid items-center w-full shrink-0 transition-opacity duration-500 ${
+                  className={`grid items-center w-full shrink-0 py-2 transition-opacity duration-500 ${
                     !isVisible ? 'opacity-0 pointer-events-none' : ''
                   }`}
                 >
@@ -1253,7 +1275,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
                       fontSize: `${isCurrent ? stageFontSize * 0.5 : stageFontSize * 0.38}px`,
                       lineHeight: '1.2'
                     }}
-                    className={`text-right font-medium pr-4 md:pr-6 transition-all duration-500 ${
+                    className={`text-right font-medium pr-4 md:pr-6 break-words min-w-0 transition-opacity duration-500 ${
                       !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100 font-bold' : isPast ? 'opacity-25' : 'opacity-40'
                     }`}
                   >
@@ -1268,8 +1290,8 @@ function StageView({ songs, playback, elapsed, onExit }) {
                       fontSize: `${isCurrent ? stageFontSize : stageFontSize * 0.7}px`,
                       lineHeight: '1.2'
                     }}
-                    className={`text-left pl-4 md:pl-6 transition-all duration-500 ${
-                      !isVisible ? 'opacity-0' : isCurrent ? 'font-bold scale-[1.02] opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
+                    className={`text-left pl-4 md:pl-6 break-words min-w-0 transition-opacity duration-500 ${
+                      !isVisible ? 'opacity-0' : isCurrent ? 'font-bold opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
                     }`}
                   >
                     {l.en}
