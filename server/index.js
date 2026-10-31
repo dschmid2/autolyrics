@@ -48,13 +48,15 @@ function defaultPlayback() {
     anchorElapsed: 0,
     updatedAt: Date.now(),
     fontSize: 64,
+    stageFontSize: 64,
     translationPercent: 60,
     positionX: 50,
     positionY: 50,
     showHeartbeat: true,
     stagePastLines: 2,
     stageFutureLines: 2,
-    stageLeadSeconds: 0
+    stageLeadSeconds: 0,
+    stageCommentWidthPercent: 20
   };
 }
 

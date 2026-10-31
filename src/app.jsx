@@ -952,7 +952,7 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
         <div className="rounded-xl p-4 space-y-4" style={{ background: COLORS.panelBg2 }}>
           <div className="space-y-1">
             <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Schriftgrösse Haupttext</span>
+              <span>Schriftgrösse Projektion (Live-View)</span>
               <span className="font-mono">{fontSize}px</span>
             </div>
             <input
@@ -1029,13 +1029,13 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
                 <span>Schriftgrösse (Stage-View)</span>
-                <span className="font-mono">{playback.stageFontSize !== undefined ? playback.stageFontSize : (playback.fontSize !== undefined ? playback.fontSize : 64)}px</span>
+                <span className="font-mono">{playback.stageFontSize !== undefined ? playback.stageFontSize : 64}px</span>
               </div>
               <input
                 type="range"
                 min="20"
                 max="120"
-                value={playback.stageFontSize !== undefined ? playback.stageFontSize : (playback.fontSize !== undefined ? playback.fontSize : 64)}
+                value={playback.stageFontSize !== undefined ? playback.stageFontSize : 64}
                 onChange={(e) => onChangePlayback({ stageFontSize: Number(e.target.value) })}
                 className="w-full accent-amber"
               />
@@ -1151,7 +1151,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
   const idx = song ? currentIndex(lines, elapsed + stageLeadSeconds) : -1;
   const currentIdx = idx >= 0 ? idx : 0;
 
-  const stageFontSize = playback.stageFontSize !== undefined ? playback.stageFontSize : (playback.fontSize !== undefined ? playback.fontSize : 64);
+  const stageFontSize = playback.stageFontSize !== undefined ? playback.stageFontSize : 64;
   const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
   const commentPercent = playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20;
 
@@ -1172,7 +1172,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
       className="fixed inset-0 select-none cursor-none flex flex-col justify-center items-center px-6 overflow-hidden"
       style={{ background: COLORS.stageBg }}
     >
-      <div className="relative w-full max-w-6xl h-full flex items-center justify-center overflow-hidden">
+      <div className="relative w-full max-w-6xl h-full overflow-hidden">
         {/* Durchgehende vertikale Trennlinie */}
         {commentPercent > 0 && commentPercent < 100 && (
           <div
@@ -1183,9 +1183,10 @@ function StageView({ songs, playback, elapsed, onExit }) {
 
         {/* Animated scrolling container */}
         <div
-          className="w-full flex flex-col items-center transition-transform duration-500 ease-out"
+          className="w-full absolute left-0 flex flex-col items-center transition-transform duration-500 ease-out"
           style={{
-            transform: `translateY(${-currentIdx * lineRowHeight}px)`
+            top: '50%',
+            transform: `translateY(calc(-${(currentIdx + 0.5) * lineRowHeight}px))`
           }}
         >
           {lines.length === 0 ? (
@@ -2264,7 +2265,7 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const loadSong = (song) => sendPlayback({ songId: song.id, status: 'stopped', anchorEpoch: Date.now(), anchorElapsed: 0 });
+  const loadSong = (song) => sendPlayback({ ...playback, songId: song.id, status: 'stopped', anchorEpoch: Date.now(), anchorElapsed: 0 });
   const togglePlay = () => {
     if (playback.status === 'playing') {
       sendPlayback({ ...playback, status: 'paused', anchorElapsed: computeElapsed(playback), anchorEpoch: Date.now() });
