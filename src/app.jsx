@@ -801,13 +801,16 @@ function defaultPlayback() {
     fontSize: 64,
     stageFontSize: 64,
     translationPercent: 60,
+    translationSpacing: 24,
     positionX: 50,
     positionY: 50,
     showHeartbeat: true,
     stagePastLines: 2,
     stageFutureLines: 2,
     stageLeadSeconds: 0,
-    stageCommentWidthPercent: 20
+    stageCommentWidthPercent: 20,
+    stageLineSpacing: 24,
+    stagePositionY: 0
   };
 }
 
@@ -934,12 +937,14 @@ function useElapsed(playback) {
 function OptionsView({ playback, onChangePlayback, onBack }) {
   const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
   const translationPercent = playback.translationPercent !== undefined ? playback.translationPercent : 60;
+  const translationSpacing = playback.translationSpacing !== undefined ? playback.translationSpacing : 24;
   const positionX = playback.positionX !== undefined ? playback.positionX : 50;
   const positionY = playback.positionY !== undefined ? playback.positionY : 50;
   const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
   const stagePastLines = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
   const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
   const stageLeadSeconds = playback.stageLeadSeconds !== undefined ? playback.stageLeadSeconds : 0;
+  const stagePositionY = playback.stagePositionY !== undefined ? playback.stagePositionY : 0;
 
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
@@ -976,6 +981,21 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
               max="100"
               value={translationPercent}
               onChange={(e) => onChangePlayback({ translationPercent: Number(e.target.value) })}
+              className="w-full accent-amber"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+              <span>Abstand zwischen Text und Übersetzung</span>
+              <span className="font-mono">{translationSpacing}px</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={translationSpacing}
+              onChange={(e) => onChangePlayback({ translationSpacing: Number(e.target.value) })}
               className="w-full accent-amber"
             />
           </div>
@@ -1037,6 +1057,36 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
                 max="120"
                 value={playback.stageFontSize !== undefined ? playback.stageFontSize : 64}
                 onChange={(e) => onChangePlayback({ stageFontSize: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Zeilenabstand (Stage-View)</span>
+                <span className="font-mono">{playback.stageLineSpacing !== undefined ? playback.stageLineSpacing : 24}px</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="80"
+                value={playback.stageLineSpacing !== undefined ? playback.stageLineSpacing : 24}
+                onChange={(e) => onChangePlayback({ stageLineSpacing: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Vertikale Position (Stage-View)</span>
+                <span className="font-mono">{stagePositionY > 0 ? `+${stagePositionY}` : stagePositionY}%</span>
+              </div>
+              <input
+                type="range"
+                min="-50"
+                max="50"
+                value={stagePositionY}
+                onChange={(e) => onChangePlayback({ stagePositionY: Number(e.target.value) })}
                 className="w-full accent-amber"
               />
             </div>
@@ -1148,6 +1198,8 @@ function StageView({ songs, playback, elapsed, onExit }) {
   const stageLeadSeconds = playback.stageLeadSeconds !== undefined ? playback.stageLeadSeconds : 0;
   const stagePastLines = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
   const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
+  const stageLineSpacing = playback.stageLineSpacing !== undefined ? playback.stageLineSpacing : 24;
+  const stagePositionY = playback.stagePositionY !== undefined ? playback.stagePositionY : 0;
   const idx = song ? currentIndex(lines, elapsed + stageLeadSeconds) : -1;
   const currentIdx = idx >= 0 ? idx : 0;
 
@@ -1164,7 +1216,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
     }
   };
 
-  const lineRowHeight = Math.max(60, stageFontSize * 1.6);
+  const lineRowHeight = Math.max(20, Math.round(stageFontSize * 1.2 + stageLineSpacing));
 
   return (
     <div
@@ -1185,7 +1237,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
         <div
           className="w-full absolute left-0 flex flex-col items-center transition-transform duration-500 ease-out"
           style={{
-            top: '50%',
+            top: `${50 + stagePositionY}%`,
             transform: `translateY(calc(-${(currentIdx + 0.5) * lineRowHeight}px))`
           }}
         >
@@ -1221,11 +1273,11 @@ function StageView({ songs, playback, elapsed, onExit }) {
                       style={{
                         color: isCurrent ? COLORS.stageText : COLORS.stageTextDim,
                         fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
-                        fontSize: `${isCurrent ? stageFontSize : stageFontSize * 0.7}px`,
+                        fontSize: `${stageFontSize}px`,
                         lineHeight: '1.2'
                       }}
                       className={`text-left transition-all duration-500 ${
-                        !isVisible ? 'opacity-0' : isCurrent ? 'font-bold scale-[1.02] opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
+                        !isVisible ? 'opacity-0' : isCurrent ? 'font-bold opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
                       }`}
                     >
                       {l.en}
@@ -1250,7 +1302,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
                     style={{
                       color: isCurrent ? COLORS.amber : COLORS.stageTextDim,
                       fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-                      fontSize: `${isCurrent ? stageFontSize * 0.5 : stageFontSize * 0.38}px`,
+                      fontSize: `${stageFontSize * 0.5}px`,
                       lineHeight: '1.2'
                     }}
                     className={`text-right font-medium pr-4 md:pr-6 transition-all duration-500 ${
@@ -1265,11 +1317,11 @@ function StageView({ songs, playback, elapsed, onExit }) {
                     style={{
                       color: isCurrent ? COLORS.stageText : COLORS.stageTextDim,
                       fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
-                      fontSize: `${isCurrent ? stageFontSize : stageFontSize * 0.7}px`,
+                      fontSize: `${stageFontSize}px`,
                       lineHeight: '1.2'
                     }}
                     className={`text-left pl-4 md:pl-6 transition-all duration-500 ${
-                      !isVisible ? 'opacity-0' : isCurrent ? 'font-bold scale-[1.02] opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
+                      !isVisible ? 'opacity-0' : isCurrent ? 'font-bold opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
                     }`}
                   >
                     {l.en}
@@ -1338,6 +1390,7 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
 
   const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
   const translationPercent = playback.translationPercent !== undefined ? playback.translationPercent : 60;
+  const translationSpacing = playback.translationSpacing !== undefined ? playback.translationSpacing : 24;
   const positionX = playback.positionX !== undefined ? playback.positionX : 50;
   const positionY = playback.positionY !== undefined ? playback.positionY : 50;
   const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
@@ -1352,12 +1405,13 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
     <div ref={containerRef} className="fixed inset-0 select-none cursor-none" style={{ background: COLORS.stageBg }}>
       {line && (
         <div
-          className="absolute flex flex-col items-center gap-6 px-10 text-center max-w-6xl pointer-events-none"
+          className="absolute flex flex-col items-center px-10 text-center max-w-6xl pointer-events-none"
           style={{
             left: `${positionX}%`,
             top: `${positionY}%`,
             transform: 'translate(-50%, -50%)',
             width: '100%',
+            rowGap: `${translationSpacing}px`,
           }}
         >
           <div
