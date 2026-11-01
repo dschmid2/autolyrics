@@ -50,13 +50,16 @@ function defaultPlayback() {
     fontSize: 64,
     stageFontSize: 64,
     translationPercent: 60,
+    translationSpacing: 24,
     positionX: 50,
     positionY: 50,
     showHeartbeat: true,
     stagePastLines: 2,
     stageFutureLines: 2,
     stageLeadSeconds: 0,
-    stageCommentWidthPercent: 20
+    stageCommentWidthPercent: 20,
+    stageLineSpacing: 24,
+    stagePositionY: 0
   };
 }
 
