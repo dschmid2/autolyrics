@@ -1319,7 +1319,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
                     !isVisible ? 'opacity-0 pointer-events-none' : ''
                   }`}
                 >
-                  {/* Left Column: Comment (Right-aligned, never wraps) */}
+                  {/* Left Column: Comment (Right-aligned, wraps without truncation) */}
                   <div
                     style={{
                       color: isCurrent ? COLORS.amber : COLORS.stageTextDim,
@@ -1327,7 +1327,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
                       fontSize: `${stageFontSize * 0.5}px`,
                       lineHeight: '1.2'
                     }}
-                    className={`text-right font-medium pr-4 md:pr-6 whitespace-nowrap overflow-hidden text-ellipsis min-w-0 transition-opacity duration-500 ${
+                    className={`text-right font-medium pr-4 md:pr-6 break-words min-w-0 transition-opacity duration-500 ${
                       !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100 font-bold' : isPast ? 'opacity-25' : 'opacity-40'
                     }`}
                   >
