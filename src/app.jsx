@@ -1258,7 +1258,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
           className="w-full absolute left-0 flex flex-col items-center transition-transform duration-500 ease-out"
           style={{
             top: `${50 + stagePositionY}%`,
-            transform: `translateY(calc(-${(currentIdx + 0.5) * lineRowHeight}px))`
+            transform: `translateY(-${activeCenterOffset || (currentIdx + 0.5) * lineRowHeight}px)`
           }}
         >
           {lines.length === 0 ? (
@@ -1297,8 +1297,8 @@ function StageView({ songs, playback, elapsed, onExit }) {
                         fontSize: `${stageFontSize}px`,
                         lineHeight: '1.2'
                       }}
-                      className={`text-left transition-all duration-500 ${
-                        !isVisible ? 'opacity-0' : isCurrent ? 'font-bold opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
+                      className={`text-left font-bold transition-all duration-500 ${
+                        !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100' : isPast ? 'opacity-25' : 'opacity-40'
                       }`}
                     >
                       {l.en}
@@ -1319,7 +1319,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
                     !isVisible ? 'opacity-0 pointer-events-none' : ''
                   }`}
                 >
-                  {/* Left Column: Comment (Right-aligned) */}
+                  {/* Left Column: Comment (Right-aligned, never wraps) */}
                   <div
                     style={{
                       color: isCurrent ? COLORS.amber : COLORS.stageTextDim,
@@ -1327,14 +1327,14 @@ function StageView({ songs, playback, elapsed, onExit }) {
                       fontSize: `${stageFontSize * 0.5}px`,
                       lineHeight: '1.2'
                     }}
-                    className={`text-right font-medium pr-4 md:pr-6 break-words min-w-0 transition-opacity duration-500 ${
+                    className={`text-right font-medium pr-4 md:pr-6 whitespace-nowrap overflow-hidden text-ellipsis min-w-0 transition-opacity duration-500 ${
                       !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100 font-bold' : isPast ? 'opacity-25' : 'opacity-40'
                     }`}
                   >
                     {l.comment || ''}
                   </div>
 
-                  {/* Right Column: Lyrics (Left-aligned) */}
+                  {/* Right Column: Lyrics (Left-aligned, always bold) */}
                   <div
                     style={{
                       color: isCurrent ? COLORS.stageText : COLORS.stageTextDim,
@@ -1342,8 +1342,8 @@ function StageView({ songs, playback, elapsed, onExit }) {
                       fontSize: `${stageFontSize}px`,
                       lineHeight: '1.2'
                     }}
-                    className={`text-left pl-4 md:pl-6 transition-all duration-500 ${
-                      !isVisible ? 'opacity-0' : isCurrent ? 'font-bold opacity-100' : isPast ? 'opacity-25 font-normal' : 'opacity-40 font-normal'
+                    className={`text-left pl-4 md:pl-6 font-bold transition-all duration-500 ${
+                      !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100' : isPast ? 'opacity-25' : 'opacity-40'
                     }`}
                   >
                     {l.en}
