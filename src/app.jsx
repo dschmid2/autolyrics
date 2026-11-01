@@ -1209,6 +1209,8 @@ function StageView({ songs, playback, elapsed, onExit }) {
 
   const pulseDuration = song ? 60 / (song.bpm || 60) : 1;
   const containerRef = useRef(null);
+  const lineRefs = useRef([]);
+  const [activeCenterOffset, setActiveCenterOffset] = useState(0);
 
   const requestFs = () => {
     if (containerRef.current && containerRef.current.requestFullscreen) {
@@ -1217,6 +1219,24 @@ function StageView({ songs, playback, elapsed, onExit }) {
   };
 
   const lineRowHeight = Math.max(20, Math.round(stageFontSize * 1.2 + stageLineSpacing));
+
+  // Dynamically compute the vertical center of the active line row so wrapped lines push subsequent lines down
+  useEffect(() => {
+    const updateOffset = () => {
+      const activeEl = lineRefs.current[currentIdx];
+      if (activeEl) {
+        const lineTop = activeEl.offsetTop;
+        const lineHeight = activeEl.offsetHeight;
+        setActiveCenterOffset(lineTop + lineHeight / 2);
+      } else {
+        setActiveCenterOffset((currentIdx + 0.5) * lineRowHeight);
+      }
+    };
+
+    updateOffset();
+    window.addEventListener('resize', updateOffset);
+    return () => window.removeEventListener('resize', updateOffset);
+  }, [currentIdx, lines, stageFontSize, commentPercent, lineRowHeight]);
 
   return (
     <div
@@ -1262,10 +1282,11 @@ function StageView({ songs, playback, elapsed, onExit }) {
                 return (
                   <div
                     key={l.id}
+                    ref={(el) => { lineRefs.current[i] = el; }}
                     style={{
-                      height: `${lineRowHeight}px`
+                      minHeight: `${lineRowHeight}px`
                     }}
-                    className={`flex items-center w-full justify-start shrink-0 transition-opacity duration-500 ${
+                    className={`flex items-center w-full justify-start shrink-0 py-2 transition-opacity duration-500 ${
                       !isVisible ? 'opacity-0 pointer-events-none' : ''
                     }`}
                   >
@@ -1289,11 +1310,12 @@ function StageView({ songs, playback, elapsed, onExit }) {
               return (
                 <div
                   key={l.id}
+                  ref={(el) => { lineRefs.current[i] = el; }}
                   style={{
-                    height: `${lineRowHeight}px`,
+                    minHeight: `${lineRowHeight}px`,
                     gridTemplateColumns: `${commentPercent}% 1fr`
                   }}
-                  className={`grid items-center w-full shrink-0 transition-opacity duration-500 ${
+                  className={`grid items-center w-full shrink-0 py-2 transition-opacity duration-500 ${
                     !isVisible ? 'opacity-0 pointer-events-none' : ''
                   }`}
                 >
@@ -1305,7 +1327,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
                       fontSize: `${stageFontSize * 0.5}px`,
                       lineHeight: '1.2'
                     }}
-                    className={`text-right font-medium pr-4 md:pr-6 transition-all duration-500 ${
+                    className={`text-right font-medium pr-4 md:pr-6 break-words min-w-0 transition-opacity duration-500 ${
                       !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100 font-bold' : isPast ? 'opacity-25' : 'opacity-40'
                     }`}
                   >
