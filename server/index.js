@@ -53,6 +53,8 @@ function defaultPlayback() {
     translationSpacing: 24,
     positionX: 50,
     positionY: 50,
+    liveWidthPercent: 100,
+    liveTextAlign: 'center',
     showHeartbeat: true,
     stagePastLines: 2,
     stageFutureLines: 2,
