@@ -1244,7 +1244,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
       className="fixed inset-0 select-none cursor-none flex flex-col justify-center items-center px-6 overflow-hidden"
       style={{ background: COLORS.stageBg }}
     >
-      <div className="relative w-full max-w-6xl h-full overflow-hidden">
+      <div className="relative w-full h-full overflow-hidden">
         {/* Durchgehende vertikale Trennlinie */}
         {commentPercent > 0 && commentPercent < 100 && (
           <div
