@@ -804,6 +804,8 @@ function defaultPlayback() {
     translationSpacing: 24,
     positionX: 50,
     positionY: 50,
+    liveWidthPercent: 100,
+    liveTextAlign: 'center',
     showHeartbeat: true,
     stagePastLines: 2,
     stageFutureLines: 2,
@@ -940,6 +942,8 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
   const translationSpacing = playback.translationSpacing !== undefined ? playback.translationSpacing : 24;
   const positionX = playback.positionX !== undefined ? playback.positionX : 50;
   const positionY = playback.positionY !== undefined ? playback.positionY : 50;
+  const liveWidthPercent = playback.liveWidthPercent !== undefined ? playback.liveWidthPercent : 100;
+  const liveTextAlign = playback.liveTextAlign || 'center';
   const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
   const stagePastLines = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
   const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
@@ -1028,6 +1032,47 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
                 onChange={(e) => onChangePlayback({ positionY: Number(e.target.value) })}
                 className="w-full accent-amber"
               />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+              <span>Breite Bildbereich</span>
+              <span className="font-mono">{liveWidthPercent}%</span>
+            </div>
+            <input
+              type="range"
+              min="10"
+              max="100"
+              value={liveWidthPercent}
+              onChange={(e) => onChangePlayback({ liveWidthPercent: Number(e.target.value) })}
+              className="w-full accent-amber"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-xs" style={{ color: COLORS.inkDim }}>
+              <span>Textausrichtung</span>
+            </div>
+            <div className="flex gap-2 pt-1">
+              {[
+                { value: 'left', label: 'Links' },
+                { value: 'center', label: 'Mittig' },
+                { value: 'right', label: 'Rechts' }
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => onChangePlayback({ liveTextAlign: value })}
+                  className={`flex-1 py-1.5 px-3 text-xs rounded-lg font-medium transition-colors ${
+                    liveTextAlign === value
+                      ? 'bg-amber text-zinc-950 font-bold'
+                      : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1415,7 +1460,15 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
   const translationSpacing = playback.translationSpacing !== undefined ? playback.translationSpacing : 24;
   const positionX = playback.positionX !== undefined ? playback.positionX : 50;
   const positionY = playback.positionY !== undefined ? playback.positionY : 50;
+  const liveWidthPercent = playback.liveWidthPercent !== undefined ? playback.liveWidthPercent : 100;
+  const liveTextAlign = playback.liveTextAlign || 'center';
   const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
+
+  const alignClass = liveTextAlign === 'left'
+    ? 'items-start text-left'
+    : liveTextAlign === 'right'
+    ? 'items-end text-right'
+    : 'items-center text-center';
 
   const requestFs = () => {
     if (containerRef.current && containerRef.current.requestFullscreen) {
@@ -1427,12 +1480,12 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
     <div ref={containerRef} className="fixed inset-0 select-none cursor-none" style={{ background: COLORS.stageBg }}>
       {line && (
         <div
-          className="absolute flex flex-col items-center px-10 text-center max-w-6xl pointer-events-none"
+          className={`absolute flex flex-col pointer-events-none ${alignClass}`}
           style={{
             left: `${positionX}%`,
             top: `${positionY}%`,
             transform: 'translate(-50%, -50%)',
-            width: '100%',
+            width: `${liveWidthPercent}%`,
             rowGap: `${translationSpacing}px`,
           }}
         >
@@ -1441,6 +1494,7 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
               color: COLORS.stageText,
               fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
               fontSize: `${fontSize}px`,
+              width: '100%',
             }}
             className="font-semibold leading-tight"
           >
@@ -1451,6 +1505,7 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
               color: COLORS.stageTextDim,
               fontFamily: 'ui-sans-serif, system-ui, sans-serif',
               fontSize: `${fontSize * translationPercent / 100}px`,
+              width: '100%',
             }}
             className="font-normal leading-snug"
           >
