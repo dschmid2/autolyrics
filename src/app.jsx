@@ -935,7 +935,7 @@ function useElapsed(playback) {
 
 // --- Views ------------------------------------------------------------------
 
-function OptionsView({ playback, onChangePlayback, onBack }) {
+function OptionsView({ playback, onChangePlayback }) {
   const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
   const translationPercent = playback.translationPercent !== undefined ? playback.translationPercent : 60;
   const translationSpacing = playback.translationSpacing !== undefined ? playback.translationSpacing : 24;
@@ -951,148 +951,171 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
 
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
-      <div className="p-4 space-y-4 max-w-md mx-auto">
-        <div className="flex items-center justify-between mb-4">
+      <div className="max-w-[1200px] w-full mx-auto p-4 md:px-8 space-y-6">
+        <div>
           <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Anzeige-Optionen</h1>
-          <button onClick={onBack} className="text-sm px-3 py-1.5 rounded-lg" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>Zurück</button>
+          <p className="text-xs" style={{ color: COLORS.inkDim }}>
+            Einstellungen für Projektion (Live-View) und Bühnenanzeige (Stageview).
+          </p>
         </div>
 
-        <div className="rounded-xl p-4 space-y-4" style={{ background: COLORS.panelBg2 }}>
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Schriftgrösse Projektion (Live-View)</span>
-              <span className="font-mono">{fontSize}px</span>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          {/* Card 1: Live-View (Projektion) */}
+          <div className="rounded-2xl p-5 space-y-4 shadow-sm" style={{ background: COLORS.panelBg2 }}>
+            <div className="border-b pb-2 flex items-center justify-between" style={{ borderColor: COLORS.line }}>
+              <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: COLORS.ink }}>
+                Projektion (Live-View)
+              </h2>
+              <span className="text-xs px-2 py-0.5 rounded font-mono font-medium bg-black/5" style={{ color: COLORS.inkDim }}>
+                /live
+              </span>
             </div>
-            <input
-              type="range"
-              min="20"
-              max="120"
-              value={fontSize}
-              onChange={(e) => onChangePlayback({ fontSize: Number(e.target.value) })}
-              className="w-full accent-amber"
-            />
-          </div>
 
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Grösse Übersetzung</span>
-              <span className="font-mono">{translationPercent}%</span>
-            </div>
-            <input
-              type="range"
-              min="30"
-              max="100"
-              value={translationPercent}
-              onChange={(e) => onChangePlayback({ translationPercent: Number(e.target.value) })}
-              className="w-full accent-amber"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Abstand zwischen Text und Übersetzung</span>
-              <span className="font-mono">{translationSpacing}px</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={translationSpacing}
-              onChange={(e) => onChangePlayback({ translationSpacing: Number(e.target.value) })}
-              className="w-full accent-amber"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Position X (Zentrum)</span>
-                <span className="font-mono">{positionX}%</span>
+                <span>Schriftgrösse Projektion</span>
+                <span className="font-mono">{fontSize}px</span>
+              </div>
+              <input
+                type="range"
+                min="20"
+                max="120"
+                value={fontSize}
+                onChange={(e) => onChangePlayback({ fontSize: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Grösse Übersetzung</span>
+                <span className="font-mono">{translationPercent}%</span>
+              </div>
+              <input
+                type="range"
+                min="30"
+                max="100"
+                value={translationPercent}
+                onChange={(e) => onChangePlayback({ translationPercent: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Abstand zwischen Text und Übersetzung</span>
+                <span className="font-mono">{translationSpacing}px</span>
               </div>
               <input
                 type="range"
                 min="0"
                 max="100"
-                value={positionX}
-                onChange={(e) => onChangePlayback({ positionX: Number(e.target.value) })}
+                value={translationSpacing}
+                onChange={(e) => onChangePlayback({ translationSpacing: Number(e.target.value) })}
                 className="w-full accent-amber"
               />
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                  <span>Position X (Zentrum)</span>
+                  <span className="font-mono">{positionX}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={positionX}
+                  onChange={(e) => onChangePlayback({ positionX: Number(e.target.value) })}
+                  className="w-full accent-amber"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                  <span>Position Y (Zentrum)</span>
+                  <span className="font-mono">{positionY}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={positionY}
+                  onChange={(e) => onChangePlayback({ positionY: Number(e.target.value) })}
+                  className="w-full accent-amber"
+                />
+              </div>
+            </div>
+
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Position Y (Zentrum)</span>
-                <span className="font-mono">{positionY}%</span>
+                <span>Breite Bildbereich</span>
+                <span className="font-mono">{liveWidthPercent}%</span>
               </div>
               <input
                 type="range"
-                min="0"
+                min="10"
                 max="100"
-                value={positionY}
-                onChange={(e) => onChangePlayback({ positionY: Number(e.target.value) })}
+                value={liveWidthPercent}
+                onChange={(e) => onChangePlayback({ liveWidthPercent: Number(e.target.value) })}
                 className="w-full accent-amber"
               />
             </div>
-          </div>
 
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Breite Bildbereich</span>
-              <span className="font-mono">{liveWidthPercent}%</span>
+            <div className="space-y-1">
+              <div className="text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Textausrichtung</span>
+              </div>
+              <div className="flex gap-2 pt-1">
+                {[
+                  { value: 'left', label: 'Links' },
+                  { value: 'center', label: 'Mittig' },
+                  { value: 'right', label: 'Rechts' }
+                ].map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => onChangePlayback({ liveTextAlign: value })}
+                    className={`flex-1 py-1.5 px-3 text-xs rounded-lg font-medium transition-colors ${
+                      liveTextAlign === value
+                        ? 'bg-amber text-zinc-950 font-bold'
+                        : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <input
-              type="range"
-              min="10"
-              max="100"
-              value={liveWidthPercent}
-              onChange={(e) => onChangePlayback({ liveWidthPercent: Number(e.target.value) })}
-              className="w-full accent-amber"
-            />
-          </div>
 
-          <div className="space-y-1">
-            <div className="text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Textausrichtung</span>
-            </div>
-            <div className="flex gap-2 pt-1">
-              {[
-                { value: 'left', label: 'Links' },
-                { value: 'center', label: 'Mittig' },
-                { value: 'right', label: 'Rechts' }
-              ].map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => onChangePlayback({ liveTextAlign: value })}
-                  className={`flex-1 py-1.5 px-3 text-xs rounded-lg font-medium transition-colors ${
-                    liveTextAlign === value
-                      ? 'bg-amber text-zinc-950 font-bold'
-                      : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="flex items-center gap-2 pt-1 border-t" style={{ borderColor: COLORS.line }}>
+              <input
+                type="checkbox"
+                id="showHeartbeat"
+                checked={showHeartbeat}
+                onChange={(e) => onChangePlayback({ showHeartbeat: e.target.checked })}
+                className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 accent-amber"
+              />
+              <label htmlFor="showHeartbeat" className="text-xs font-medium cursor-pointer" style={{ color: COLORS.ink }}>
+                Pulsierender Punkt (Heartbeat) aktivieren
+              </label>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="showHeartbeat"
-              checked={showHeartbeat}
-              onChange={(e) => onChangePlayback({ showHeartbeat: e.target.checked })}
-              className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 accent-amber"
-            />
-            <label htmlFor="showHeartbeat" className="text-xs font-medium cursor-pointer" style={{ color: COLORS.ink }}>
-              Pulsierender Punkt (Heartbeat) aktivieren
-            </label>
-          </div>
+          {/* Card 2: Stage-View (Bühnenanzeige) */}
+          <div className="rounded-2xl p-5 space-y-4 shadow-sm" style={{ background: COLORS.panelBg2 }}>
+            <div className="border-b pb-2 flex items-center justify-between" style={{ borderColor: COLORS.line }}>
+              <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: COLORS.ink }}>
+                Bühnenanzeige (Stage-View)
+              </h2>
+              <span className="text-xs px-2 py-0.5 rounded font-mono font-medium bg-black/5" style={{ color: COLORS.inkDim }}>
+                /stage
+              </span>
+            </div>
 
-          <div className="border-t pt-3 mt-3 space-y-3" style={{ borderColor: COLORS.line }}>
-            <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.ink }}>Stage-View Optionen</h3>
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Schriftgrösse (Stage-View)</span>
+                <span>Schriftgrösse Stage-View</span>
                 <span className="font-mono">{playback.stageFontSize !== undefined ? playback.stageFontSize : 64}px</span>
               </div>
               <input
@@ -1107,7 +1130,7 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
 
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Zeilenabstand (Stage-View)</span>
+                <span>Zeilenabstand Stage-View</span>
                 <span className="font-mono">{playback.stageLineSpacing !== undefined ? playback.stageLineSpacing : 24}px</span>
               </div>
               <input
@@ -1122,7 +1145,7 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
 
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Vertikale Position (Stage-View)</span>
+                <span>Vertikale Position Stage-View</span>
                 <span className="font-mono">{stagePositionY > 0 ? `+${stagePositionY}` : stagePositionY}%</span>
               </div>
               <input
@@ -1535,7 +1558,7 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
   );
 }
 
-function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePlayer, onBack }) {
+function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePlayer }) {
   const playerList = Object.values(players);
 
   return (
@@ -1548,15 +1571,6 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
               Verbundene Geräte verwalten und Rollen (Projektion / Stageview) zuweisen.
             </p>
           </div>
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="text-sm px-3 py-1.5 rounded-lg transition-colors hover:bg-black/5"
-              style={{ background: COLORS.panelBg2, color: COLORS.ink }}
-            >
-              Zurück
-            </button>
-          )}
         </div>
 
         <div className="rounded-xl p-5 space-y-4 shadow-sm" style={{ background: COLORS.panelBg2 }}>
@@ -1663,17 +1677,17 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
 
   return (
     <header className="sticky top-0 z-40 w-full border-b backdrop-blur-md transition-colors" style={{ background: COLORS.panelBg + 'ee', borderColor: COLORS.line }}>
-      <div className="max-w-[1800px] mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
+      <div className="max-w-[1200px] mx-auto px-3 sm:px-4 md:px-8 flex items-center justify-between h-14">
         {/* Left: Brand & Navigation */}
-        <div className="flex items-center gap-3 sm:gap-6 overflow-x-auto py-1">
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="font-bold text-base tracking-tight" style={{ color: COLORS.ink }}>Autolyrics</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
+        <div className="flex items-center gap-2 sm:gap-6 overflow-x-auto py-1 min-w-0 no-scrollbar">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <span className="font-bold text-sm sm:text-base tracking-tight" style={{ color: COLORS.ink }}>Autolyrics</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded hidden sm:inline" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
               v{versionData.version}
             </span>
           </div>
 
-          <nav className="flex items-center gap-1 sm:gap-2">
+          <nav className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar py-0.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeView === item.id;
@@ -1681,7 +1695,7 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
                 <button
                   key={item.id}
                   onClick={() => onNavigate(item.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                  className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap shrink-0 transition-all ${
                     isActive
                       ? 'shadow-sm font-semibold'
                       : 'hover:bg-black/5 opacity-80 hover:opacity-100'
@@ -1692,7 +1706,10 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
                   }}
                 >
                   <Icon size={15} />
-                  <span>{item.label}</span>
+                  <span className="hidden sm:inline">{item.label}</span>
+                  <span className="sm:hidden">
+                    {item.id === 'control' ? 'Steuerung' : item.id === 'editor' ? 'Editor' : item.id === 'players' ? `Player${playersCount > 0 ? ` (${playersCount})` : ''}` : 'Optionen'}
+                  </span>
                 </button>
               );
             })}
@@ -1700,24 +1717,24 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
         </div>
 
         {/* Right: Quick actions for Live & Stage View */}
-        <div className="flex items-center gap-2 shrink-0 ml-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-2">
           <button
             onClick={onGotoProjection}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
             style={{ background: COLORS.ink, color: COLORS.stageText }}
             title="Projektionsansicht (/live) öffnen"
           >
             <Eye size={14} />
-            <span className="hidden sm:inline">Projektion</span>
+            <span className="hidden md:inline">Projektion</span>
           </button>
           <button
             onClick={onGotoStage}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
             style={{ background: COLORS.ink, color: COLORS.stageText }}
             title="Stageview-Ansicht (/stage) öffnen"
           >
             <Tv size={14} />
-            <span className="hidden sm:inline">Stageview</span>
+            <span className="hidden md:inline">Stageview</span>
           </button>
         </div>
       </div>
@@ -1754,7 +1771,7 @@ function ControlView({
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] pb-10" style={{ background: COLORS.panelBg }}>
-      <div className="max-w-[1800px] w-full mx-auto p-4 md:px-8 space-y-6">
+      <div className="max-w-[1200px] w-full mx-auto p-4 md:px-8 space-y-6">
 
         {/* Primary Playback Control Bar */}
         <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{ background: COLORS.panelBg2 }}>
@@ -1778,30 +1795,30 @@ function ControlView({
             </div>
 
             {/* Main Playback Buttons */}
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap justify-center">
               <button
                 onClick={() => onNudge(-5)}
                 disabled={!song}
                 aria-label="5 Sekunden zurück"
-                className="p-3 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none"
+                className="p-2.5 sm:p-3 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none"
                 style={{ background: '#fff' }}
                 title="5 Sekunden zurück"
               >
-                <SkipBack size={20} color={COLORS.ink} />
+                <SkipBack size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
               </button>
 
               <button
                 onClick={onTogglePlay}
                 disabled={!song}
                 aria-label={playback.status === 'playing' ? 'Pause und Schwarz' : 'Start'}
-                className="p-4 sm:p-5 rounded-full shadow-md hover:scale-105 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none"
+                className="p-3.5 sm:p-5 rounded-full shadow-md hover:scale-105 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none"
                 style={{ background: COLORS.amber }}
                 title={playback.status === 'playing' ? 'Pausieren (Projektion wird schwarz)' : 'Abspielen'}
               >
                 {playback.status === 'playing' ? (
-                  <Pause size={28} color="#241a08" />
+                  <Pause size={24} className="sm:w-7 sm:h-7" color="#241a08" />
                 ) : (
-                  <Play size={28} color="#241a08" className="translate-x-0.5" />
+                  <Play size={24} className="sm:w-7 sm:h-7 translate-x-0.5" color="#241a08" />
                 )}
               </button>
 
@@ -1809,22 +1826,23 @@ function ControlView({
                 onClick={() => onNudge(5)}
                 disabled={!song}
                 aria-label="5 Sekunden vor"
-                className="p-3 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none"
+                className="p-2.5 sm:p-3 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none"
                 style={{ background: '#fff' }}
                 title="5 Sekunden vor"
               >
-                <SkipForward size={20} color={COLORS.ink} />
+                <SkipForward size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
               </button>
 
               <button
                 onClick={onStop}
                 disabled={!song}
-                className="px-3.5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition hover:bg-black/10 active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+                className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition hover:bg-black/10 active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
                 style={{ background: '#fff', color: COLORS.inkDim }}
                 title="Stoppt die Wiedergabe und schaltet die Projektion schwarz"
               >
                 <Square size={13} />
-                <span>Stopp &amp; Schwarz</span>
+                <span className="hidden sm:inline">Stopp &amp; Schwarz</span>
+                <span className="sm:hidden">Stopp</span>
               </button>
 
               {songs.length > 1 && (
@@ -1836,18 +1854,19 @@ function ControlView({
                       onLoad(songs[nextIdx]);
                     }
                   }}
-                  className="px-3.5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition hover:opacity-90 active:scale-95"
+                  className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition hover:opacity-90 active:scale-95"
                   style={{ background: COLORS.amber, color: '#241a08' }}
                   title="Nächsten Song aus der Liste laden"
                 >
-                  <span>Nächster Song</span>
+                  <span className="hidden sm:inline">Nächster Song</span>
+                  <span className="sm:hidden">Weiter</span>
                   <SkipForward size={13} />
                 </button>
               )}
             </div>
 
             {/* Elapsed / Duration Time pill */}
-            <div className="font-mono text-sm px-3.5 py-2 rounded-xl shrink-0 font-bold bg-white/70 shadow-sm" style={{ color: COLORS.ink }}>
+            <div className="font-mono text-xs sm:text-sm px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl shrink-0 font-bold bg-white/70 shadow-sm" style={{ color: COLORS.ink }}>
               {fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}
             </div>
           </div>
@@ -1884,7 +1903,7 @@ function ControlView({
               </span>
             </div>
 
-            <div className="space-y-2 max-h-[calc(100vh-22rem)] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-48 md:max-h-[calc(100vh-22rem)] overflow-y-auto pr-1">
               {songs.map((s) => {
                 const isSelected = s.id === playback.songId;
                 return (
@@ -2410,7 +2429,7 @@ function SongEditor({ song, onChange, onDelete }) {
   );
 }
 
-function EditorView({ songs, onChangeSongs, onBack }) {
+function EditorView({ songs, onChangeSongs }) {
   const [selectedId, setSelectedId] = useState(songs[0] ? songs[0].id : null);
   const selected = songs.find((s) => s.id === selectedId) || null;
 
@@ -2438,13 +2457,13 @@ function EditorView({ songs, onChangeSongs, onBack }) {
 
   return (
     <div className="min-h-screen" style={{ background: COLORS.panelBg }}>
-      <div className="max-w-[1800px] w-full mx-auto p-4 md:px-8">
+      <div className="max-w-[1200px] w-full mx-auto p-4 md:px-8">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Songs verwalten</h1>
-          <button onClick={onBack} className="text-sm px-3 py-1.5 rounded-lg" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>Zur Steuerung</button>
         </div>
         <div className="flex flex-col md:flex-row gap-6">
-          <div className="md:w-64 shrink-0 space-y-2">
+          <div className="w-full md:w-64 shrink-0 space-y-2">
+            <div className="space-y-2 max-h-48 md:max-h-none overflow-y-auto pr-1">
             {songs.map((s, index) => (
               <div
                 key={s.id}
@@ -2478,6 +2497,7 @@ function EditorView({ songs, onChangeSongs, onBack }) {
                 </div>
               </div>
             ))}
+            </div>
             <button onClick={addSong} className="w-full text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}><Plus size={14} /> Neuer Song</button>
           </div>
           <div className="flex-1 min-w-0">
@@ -2585,16 +2605,15 @@ export default function App() {
             playersCount={Object.keys(players).length}
           />
           {view === 'editor' ? (
-            <EditorView songs={songs} onChangeSongs={sendSongs} onBack={() => setView('control')} />
+            <EditorView songs={songs} onChangeSongs={sendSongs} />
           ) : view === 'options' ? (
-            <OptionsView playback={playback} onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })} onBack={() => setView('control')} />
+            <OptionsView playback={playback} onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })} />
           ) : view === 'players' ? (
             <PlayersView
               players={players}
               localPlayerId={playerId}
               onSetPlayerRole={sendPlayerRole}
               onDeletePlayer={sendDeletePlayer}
-              onBack={() => setView('control')}
             />
           ) : (
             <ControlView
