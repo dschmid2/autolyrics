@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, QrCode, Upload, ZoomIn, ZoomOut, Music, Clock } from 'lucide-react';
-import QRCode from 'qrcode';
+import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Users, Sliders, MonitorPlay, Tv, Eye } from 'lucide-react';
 import versionData from './version.json';
 
 const COLORS = {
@@ -1536,121 +1535,298 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
   );
 }
 
+function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePlayer, onBack }) {
+  const playerList = Object.values(players);
+
+  return (
+    <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
+      <div className="max-w-[1200px] w-full mx-auto p-4 md:px-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Player-Verwaltung</h1>
+            <p className="text-xs" style={{ color: COLORS.inkDim }}>
+              Verbundene Geräte verwalten und Rollen (Projektion / Stageview) zuweisen.
+            </p>
+          </div>
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="text-sm px-3 py-1.5 rounded-lg transition-colors hover:bg-black/5"
+              style={{ background: COLORS.panelBg2, color: COLORS.ink }}
+            >
+              Zurück
+            </button>
+          )}
+        </div>
+
+        <div className="rounded-xl p-5 space-y-4 shadow-sm" style={{ background: COLORS.panelBg2 }}>
+          <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: COLORS.line }}>
+            <span className="font-semibold text-sm" style={{ color: COLORS.ink }}>
+              Verbundene Player ({playerList.length})
+            </span>
+          </div>
+
+          {playerList.length === 0 ? (
+            <div className="text-center py-10 space-y-2">
+              <div className="text-sm font-medium" style={{ color: COLORS.ink }}>
+                Aktuell sind keine Player verbunden.
+              </div>
+              <div className="text-xs max-w-md mx-auto" style={{ color: COLORS.inkDim }}>
+                Öffne auf einem anderen Gerät die URL <code className="font-mono px-1 py-0.5 rounded bg-black/5 font-semibold">/player</code>, um das Gerät automatisch hier registrieren zu lassen.
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {playerList.map((p) => {
+                const isSelf = p.id === localPlayerId;
+                return (
+                  <div key={p.id} className="p-3.5 rounded-lg bg-white shadow-sm space-y-3 border border-black/5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full ${p.online ? 'bg-emerald-500 ring-2 ring-emerald-200' : 'bg-zinc-400'}`}
+                          title={p.online ? 'Online' : 'Offline'}
+                        />
+                        <span className="font-mono text-xs font-bold" style={{ color: COLORS.ink }}>
+                          {p.id}
+                        </span>
+                        {isSelf && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                            Dieses Gerät
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => onDeletePlayer(p.id)}
+                        className="p-1.5 rounded hover:bg-red-50 text-red-600 transition-colors"
+                        title="Player entfernen"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-xs font-medium" style={{ color: COLORS.inkDim }}>
+                        Zugewiesene Rolle:
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => onSetPlayerRole(p.id, 'live')}
+                          className={`px-3 py-1 rounded text-xs font-medium transition-all ${
+                            p.role === 'live'
+                              ? 'bg-amber-500 text-black font-bold shadow-sm'
+                              : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                          }`}
+                        >
+                          Live
+                        </button>
+                        <button
+                          onClick={() => onSetPlayerRole(p.id, 'stage')}
+                          className={`px-3 py-1 rounded text-xs font-medium transition-all ${
+                            p.role === 'stage'
+                              ? 'bg-amber-500 text-black font-bold shadow-sm'
+                              : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                          }`}
+                        >
+                          Stage
+                        </button>
+                        <button
+                          onClick={() => onSetPlayerRole(p.id, null)}
+                          className={`px-3 py-1 rounded text-xs font-medium transition-all ${
+                            !p.role
+                              ? 'bg-zinc-800 text-white font-bold'
+                              : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                          }`}
+                        >
+                          Keine
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, playersCount = 0 }) {
+  const navItems = [
+    { id: 'control', label: 'Steuerung', icon: MonitorPlay },
+    { id: 'editor', label: 'Song-Editor', icon: Music },
+    { id: 'players', label: `Player-Verwaltung${playersCount > 0 ? ` (${playersCount})` : ''}`, icon: Users },
+    { id: 'options', label: 'Einstellungen', icon: Sliders },
+  ];
+
+  return (
+    <header className="sticky top-0 z-40 w-full border-b backdrop-blur-md transition-colors" style={{ background: COLORS.panelBg + 'ee', borderColor: COLORS.line }}>
+      <div className="max-w-[1800px] mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
+        {/* Left: Brand & Navigation */}
+        <div className="flex items-center gap-3 sm:gap-6 overflow-x-auto py-1">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="font-bold text-base tracking-tight" style={{ color: COLORS.ink }}>Autolyrics</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
+              v{versionData.version}
+            </span>
+          </div>
+
+          <nav className="flex items-center gap-1 sm:gap-2">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeView === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onNavigate(item.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                    isActive
+                      ? 'shadow-sm font-semibold'
+                      : 'hover:bg-black/5 opacity-80 hover:opacity-100'
+                  }`}
+                  style={{
+                    background: isActive ? COLORS.amber : 'transparent',
+                    color: isActive ? '#241a08' : COLORS.ink,
+                  }}
+                >
+                  <Icon size={15} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Right: Quick actions for Live & Stage View */}
+        <div className="flex items-center gap-2 shrink-0 ml-2">
+          <button
+            onClick={onGotoProjection}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
+            style={{ background: COLORS.ink, color: COLORS.stageText }}
+            title="Projektionsansicht (/live) öffnen"
+          >
+            <Eye size={14} />
+            <span className="hidden sm:inline">Projektion</span>
+          </button>
+          <button
+            onClick={onGotoStage}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
+            style={{ background: COLORS.ink, color: COLORS.stageText }}
+            title="Stageview-Ansicht (/stage) öffnen"
+          >
+            <Tv size={14} />
+            <span className="hidden sm:inline">Stageview</span>
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
 function ControlView({
   songs,
   playback,
-  players = {},
-  localPlayerId,
-  onSetPlayerRole,
-  onDeletePlayer,
   elapsed,
-  serverIp,
-  serverPort,
   onLoad,
   onTogglePlay,
   onStop,
   onSeek,
   onNudge,
-  onChangePlayback,
-  onGotoEditor,
-  onGotoProjection,
-  onGotoOptions,
-  onGotoStage
 }) {
   const song = songs.find((s) => s.id === playback.songId) || null;
   const lines = song ? sortedLines(song) : [];
   const idx = song ? currentIndex(lines, elapsed) : -1;
   const duration = getSongDuration(lines);
 
-  const [showQrSection, setShowQrSection] = useState(false);
-  const [showPlayersSection, setShowPlayersSection] = useState(true);
-  const [qrBaseUrl, setQrBaseUrl] = useState('');
-  const [playerQr, setPlayerQr] = useState('');
-  const [liveQr, setLiveQr] = useState('');
-  const [stageQr, setStageQr] = useState('');
+  const activeLineRef = useRef(null);
 
-  const playerList = Object.values(players);
-
+  // Auto-scroll active lyric line into view if it changes
   useEffect(() => {
-    let host = window.location.hostname;
-    let port = window.location.port;
-    if ((host === 'localhost' || host === '127.0.0.1') && serverIp && serverIp !== 'localhost') {
-      host = serverIp;
+    if (activeLineRef.current) {
+      activeLineRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      });
     }
-    if (!window.location.port) {
-      port = '';
-    } else if (serverPort) {
-      port = serverPort;
-    }
-    const base = `${window.location.protocol}//${host}${port ? ':' + port : ''}`;
-    setQrBaseUrl(base);
-  }, [serverIp, serverPort]);
-
-  useEffect(() => {
-    if (!qrBaseUrl) return;
-    const playerUrl = `${qrBaseUrl}/player`;
-    const liveUrl = `${qrBaseUrl}/live`;
-    const stageUrl = `${qrBaseUrl}/stage`;
-
-    QRCode.toDataURL(playerUrl, { width: 160, margin: 1 })
-      .then(url => setPlayerQr(url))
-      .catch(err => console.error(err));
-
-    QRCode.toDataURL(liveUrl, { width: 160, margin: 1 })
-      .then(url => setLiveQr(url))
-      .catch(err => console.error(err));
-
-    QRCode.toDataURL(stageUrl, { width: 160, margin: 1 })
-      .then(url => setStageQr(url))
-      .catch(err => console.error(err));
-  }, [qrBaseUrl]);
+  }, [idx]);
 
   return (
-    <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
-      <div className="p-4 space-y-4 max-w-md mx-auto">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Steuerung</h1>
-          <span className="text-xs font-mono" style={{ color: COLORS.inkDim }}>v{versionData.version}</span>
-        </div>
+    <div className="min-h-[calc(100vh-3.5rem)] pb-10" style={{ background: COLORS.panelBg }}>
+      <div className="max-w-[1800px] w-full mx-auto p-4 md:px-8 space-y-6">
 
-        <div className="space-y-2">
-          <div className="text-xs uppercase tracking-wide" style={{ color: COLORS.inkDim }}>Song wählen</div>
-          <div className="flex flex-col gap-2">
-            {songs.map((s) => (
-              <button key={s.id} onClick={() => onLoad(s)} className="text-left px-3 py-2 rounded-lg flex items-center justify-between" style={{ background: s.id === playback.songId ? COLORS.amber : COLORS.panelBg2, color: s.id === playback.songId ? '#241a08' : COLORS.ink }}>
-                <span className="font-medium">{s.title}</span>
-                <span className="text-xs opacity-70">{s.bpm} BPM</span>
-              </button>
-            ))}
-            {songs.length === 0 && <div className="text-sm" style={{ color: COLORS.inkDim }}>Keine Songs vorhanden. Zum Editor wechseln, um einen zu erstellen.</div>}
-          </div>
-        </div>
+        {/* Primary Playback Control Bar */}
+        <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{ background: COLORS.panelBg2 }}>
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
 
-        {song && (
-          <div className="space-y-3 pt-2">
-            <div className="rounded-xl p-4" style={{ background: COLORS.ink }}>
-              <div className="text-xs mb-1" style={{ color: COLORS.line }}>{fmtTime(elapsed)} / {fmtTime(duration)}</div>
-              <div className="text-lg font-semibold" style={{ color: COLORS.stageText }}>
-                {idx >= 0 ? lines[idx].en : (playback.status === 'playing' ? '…' : '— Schwarz —')}
+            {/* Song title and current playback line snippet */}
+            <div className="flex-1 min-w-0 w-full lg:w-auto">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs uppercase tracking-wider font-bold" style={{ color: COLORS.inkDim }}>
+                  Aktueller Song
+                </span>
+                {song && (
+                  <span className="text-xs font-mono px-2 py-0.5 rounded font-semibold bg-white/70" style={{ color: COLORS.ink }}>
+                    {song.bpm} BPM
+                  </span>
+                )}
               </div>
-              <div className="text-sm" style={{ color: COLORS.line }}>{idx >= 0 ? lines[idx].de : ''}</div>
+              <h2 className="text-xl sm:text-2xl font-bold truncate" style={{ color: COLORS.ink }}>
+                {song ? song.title : 'Kein Song ausgewählt'}
+              </h2>
             </div>
 
-            <div className="flex items-center justify-center gap-3">
-              <button onClick={() => onNudge(-5)} aria-label="5 Sekunden zurück" className="p-3 rounded-full" style={{ background: COLORS.panelBg2 }}>
+            {/* Main Playback Buttons */}
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={() => onNudge(-5)}
+                disabled={!song}
+                aria-label="5 Sekunden zurück"
+                className="p-3 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none"
+                style={{ background: '#fff' }}
+                title="5 Sekunden zurück"
+              >
                 <SkipBack size={20} color={COLORS.ink} />
               </button>
-              <button onClick={onTogglePlay} aria-label={playback.status === 'playing' ? 'Pause und Schwarz' : 'Start'} className="p-5 rounded-full" style={{ background: COLORS.amber }}>
-                {playback.status === 'playing' ? <Pause size={28} color="#241a08" /> : <Play size={28} color="#241a08" />}
+
+              <button
+                onClick={onTogglePlay}
+                disabled={!song}
+                aria-label={playback.status === 'playing' ? 'Pause und Schwarz' : 'Start'}
+                className="p-4 sm:p-5 rounded-full shadow-md hover:scale-105 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none"
+                style={{ background: COLORS.amber }}
+                title={playback.status === 'playing' ? 'Pausieren (Projektion wird schwarz)' : 'Abspielen'}
+              >
+                {playback.status === 'playing' ? (
+                  <Pause size={28} color="#241a08" />
+                ) : (
+                  <Play size={28} color="#241a08" className="translate-x-0.5" />
+                )}
               </button>
-              <button onClick={() => onNudge(5)} aria-label="5 Sekunden vor" className="p-3 rounded-full" style={{ background: COLORS.panelBg2 }}>
+
+              <button
+                onClick={() => onNudge(5)}
+                disabled={!song}
+                aria-label="5 Sekunden vor"
+                className="p-3 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none"
+                style={{ background: '#fff' }}
+                title="5 Sekunden vor"
+              >
                 <SkipForward size={20} color={COLORS.ink} />
               </button>
-            </div>
-            <div className="flex justify-center gap-3">
-              <button onClick={onStop} className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
-                <Square size={12} /> Stopp &amp; Schwarz
+
+              <button
+                onClick={onStop}
+                disabled={!song}
+                className="px-3.5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition hover:bg-black/10 active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+                style={{ background: '#fff', color: COLORS.inkDim }}
+                title="Stoppt die Wiedergabe und schaltet die Projektion schwarz"
+              >
+                <Square size={13} />
+                <span>Stopp &amp; Schwarz</span>
               </button>
+
               {songs.length > 1 && (
                 <button
                   onClick={() => {
@@ -1660,191 +1836,161 @@ function ControlView({
                       onLoad(songs[nextIdx]);
                     }
                   }}
-                  className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1"
+                  className="px-3.5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition hover:opacity-90 active:scale-95"
                   style={{ background: COLORS.amber, color: '#241a08' }}
+                  title="Nächsten Song aus der Liste laden"
                 >
-                  Nächster Song <SkipForward size={12} />
+                  <span>Nächster Song</span>
+                  <SkipForward size={13} />
                 </button>
               )}
             </div>
 
-            <div className="pt-2">
-              <div className="text-xs uppercase tracking-wide mb-1" style={{ color: COLORS.inkDim }}>An Zeile springen</div>
-              <div className="max-h-64 overflow-y-auto rounded-lg divide-y" style={{ borderColor: COLORS.panelBg2 }}>
-                {lines.map((l, i) => (
-                  <button key={l.id} onClick={() => onSeek(l.t)} className="w-full text-left px-3 py-2 text-sm flex gap-2 items-start" style={{ background: i === idx ? COLORS.amber : 'transparent', color: i === idx ? '#241a08' : COLORS.ink }}>
-                    <span className="opacity-60 text-xs w-10 shrink-0 pt-0.5">{fmtTime(l.t)}</span>
-                    <span>{l.en}</span>
-                  </button>
-                ))}
-              </div>
+            {/* Elapsed / Duration Time pill */}
+            <div className="font-mono text-sm px-3.5 py-2 rounded-xl shrink-0 font-bold bg-white/70 shadow-sm" style={{ color: COLORS.ink }}>
+              {fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}
             </div>
           </div>
-        )}
 
-        <div className="flex gap-2 pt-4">
-          <button onClick={onGotoOptions} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>
-            <Settings2 size={14} /> Anzeige-Optionen
-          </button>
-          <button onClick={onGotoEditor} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>
-            <Settings2 size={14} /> Songs verwalten
-          </button>
-        </div>
-        <div className="flex gap-2 pt-2">
-          <button onClick={onGotoProjection} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}>
-            <Maximize2 size={14} /> Projektion öffnen
-          </button>
-          <button onClick={onGotoStage} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}>
-            <Maximize2 size={14} /> Stageview öffnen
-          </button>
+          {/* Current Live Line Preview Banner */}
+          {song && (
+            <div className="rounded-xl p-4 shadow-inner" style={{ background: COLORS.ink }}>
+              <div className="flex items-center justify-between text-xs mb-1.5" style={{ color: COLORS.line }}>
+                <span className="uppercase tracking-wider font-semibold opacity-70">
+                  {playback.status === 'playing' ? 'Aktuelle Zeile (Live)' : 'Status'}
+                </span>
+                <span>{fmtTime(elapsed)} / {fmtTime(duration)}</span>
+              </div>
+              <div className="text-lg sm:text-xl font-bold min-h-[1.75rem]" style={{ color: COLORS.stageText }}>
+                {idx >= 0 ? lines[idx].en : (playback.status === 'playing' ? '…' : '— Schwarz —')}
+              </div>
+              {idx >= 0 && lines[idx].de && (
+                <div className="text-sm mt-0.5" style={{ color: COLORS.line }}>
+                  {lines[idx].de}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="pt-4 border-t space-y-3" style={{ borderColor: COLORS.line }}>
-          {/* Player Management Section */}
-          <div>
-            <button
-              onClick={() => setShowPlayersSection(!showPlayersSection)}
-              className="w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-between"
-              style={{ background: COLORS.panelBg2, color: COLORS.ink }}
-            >
-              <span className="flex items-center gap-1.5 font-bold">
-                Player-Verwaltung ({playerList.length})
+        {/* 2-Column Main Workspace: Left = Song List, Center/Right = Lyrics Lines with scroll */}
+        <div className="flex flex-col md:flex-row gap-6 items-start">
+
+          {/* LEFT: Song selection */}
+          <div className="w-full md:w-80 shrink-0 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wider font-bold" style={{ color: COLORS.inkDim }}>
+                Lieder ({songs.length})
               </span>
-              {showPlayersSection ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
+            </div>
 
-            {showPlayersSection && (
-              <div className="mt-2 space-y-2 p-3 rounded-xl" style={{ background: COLORS.panelBg2 }}>
-                {playerList.length === 0 ? (
-                  <div className="text-xs italic text-center py-2" style={{ color: COLORS.inkDim }}>
-                    Keine Player verbunden. Scanne den QR-Code auf ein Gerät, um sich zu verbinden.
-                  </div>
-                ) : (
-                  playerList.map((p) => {
-                    const isSelf = p.id === localPlayerId;
-                    return (
-                      <div key={p.id} className="p-2.5 rounded-lg bg-white shadow-sm space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-2.5 h-2.5 rounded-full ${p.online ? 'bg-emerald-500' : 'bg-zinc-400'}`} title={p.online ? 'Online' : 'Offline'} />
-                            <span className="font-mono text-xs font-bold" style={{ color: COLORS.ink }}>
-                              {p.id} {isSelf && <span className="text-[10px] font-normal text-amber-600">(Dieses Gerät)</span>}
+            <div className="space-y-2 max-h-[calc(100vh-22rem)] overflow-y-auto pr-1">
+              {songs.map((s) => {
+                const isSelected = s.id === playback.songId;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => onLoad(s)}
+                    className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all ${
+                      isSelected
+                        ? 'shadow-md font-bold'
+                        : 'hover:bg-black/5 opacity-85 hover:opacity-100'
+                    }`}
+                    style={{
+                      background: isSelected ? COLORS.amber : COLORS.panelBg2,
+                      color: isSelected ? '#241a08' : COLORS.ink,
+                    }}
+                  >
+                    <span className="truncate pr-2 font-medium">{s.title}</span>
+                    <span className="text-xs font-mono shrink-0 opacity-70">{s.bpm} BPM</span>
+                  </button>
+                );
+              })}
+              {songs.length === 0 && (
+                <div className="text-sm py-4 text-center rounded-xl p-3" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
+                  Keine Songs vorhanden.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CENTER: Lyrics Lines with scroll & jump to line */}
+          <div className="flex-1 min-w-0 w-full space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wider font-bold" style={{ color: COLORS.inkDim }}>
+                Songzeilen {lines.length > 0 ? `(${lines.length}) – Klick springt zur Zeile` : ''}
+              </span>
+              {song && (
+                <span className="text-xs" style={{ color: COLORS.inkDim }}>
+                  {lines.filter(l => !l.stageOnly).length} Projektion / {lines.filter(l => l.stageOnly).length} nur Stage
+                </span>
+              )}
+            </div>
+
+            {!song ? (
+              <div className="p-12 text-center rounded-2xl border-2 border-dashed border-black/10" style={{ color: COLORS.inkDim }}>
+                Wähle links einen Song aus, um die Zeilen und Steuerung anzuzeigen.
+              </div>
+            ) : lines.length === 0 ? (
+              <div className="p-12 text-center rounded-2xl" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
+                Dieser Song hat noch keine Textzeilen. Öffne den Song-Editor, um Text hinzuzufügen.
+              </div>
+            ) : (
+              <div
+                className="max-h-[calc(100vh-22rem)] overflow-y-auto rounded-2xl p-2 space-y-1.5 shadow-sm border border-black/5"
+                style={{ background: COLORS.panelBg2 }}
+              >
+                {lines.map((l, i) => {
+                  const isActive = i === idx;
+                  return (
+                    <button
+                      key={l.id}
+                      ref={isActive ? activeLineRef : null}
+                      onClick={() => onSeek(l.t)}
+                      className={`w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all ${
+                        isActive
+                          ? 'shadow-md scale-[1.01]'
+                          : 'hover:bg-white/60'
+                      }`}
+                      style={{
+                        background: isActive ? COLORS.amber : '#fff',
+                        color: isActive ? '#241a08' : COLORS.ink,
+                      }}
+                    >
+                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70 bg-black/5">
+                        {fmtTime(l.t)}
+                      </span>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-base leading-snug ${isActive ? 'font-bold' : 'font-semibold'}`}>
+                            {l.en}
+                          </span>
+                          {l.comment && (
+                            <span className="text-xs font-normal px-1.5 py-0.2 rounded bg-black/10 opacity-75">
+                              [{l.comment}]
                             </span>
+                          )}
+                          {l.stageOnly && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-100 text-red-700">
+                              Nur Stage
+                            </span>
+                          )}
+                        </div>
+                        {l.de && (
+                          <div className={`text-xs mt-0.5 opacity-80 ${isActive ? 'font-medium' : ''}`}>
+                            {l.de}
                           </div>
-                          <button
-                            onClick={() => onDeletePlayer(p.id)}
-                            className="p-1 rounded hover:bg-red-100 text-red-600 transition-colors"
-                            title="Player entfernen"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          <span className="text-[11px] font-medium mr-1" style={{ color: COLORS.inkDim }}>Rolle:</span>
-                          <button
-                            onClick={() => onSetPlayerRole(p.id, 'live')}
-                            className={`px-2 py-1 rounded text-xs font-medium transition-all ${
-                              p.role === 'live' ? 'bg-amber-500 text-black font-bold shadow-sm' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-                            }`}
-                          >
-                            Live
-                          </button>
-                          <button
-                            onClick={() => onSetPlayerRole(p.id, 'stage')}
-                            className={`px-2 py-1 rounded text-xs font-medium transition-all ${
-                              p.role === 'stage' ? 'bg-amber-500 text-black font-bold shadow-sm' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-                            }`}
-                          >
-                            Stage
-                          </button>
-                          <button
-                            onClick={() => onSetPlayerRole(p.id, null)}
-                            className={`px-2 py-1 rounded text-xs font-medium transition-all ${
-                              !p.role ? 'bg-zinc-700 text-white font-bold' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                            }`}
-                          >
-                            Keine
-                          </button>
-                        </div>
+                        )}
                       </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* QR Codes Section */}
-          <div>
-            <button
-              onClick={() => setShowQrSection(!showQrSection)}
-              className="w-full px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-between"
-              style={{ background: COLORS.panelBg2, color: COLORS.ink }}
-            >
-              <span className="flex items-center gap-1.5">
-                <QrCode size={16} /> QR-Codes für Mobilgeräte
-              </span>
-              {showQrSection ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-
-            {showQrSection && (
-              <div className="mt-3 space-y-4 p-3 rounded-xl" style={{ background: COLORS.panelBg2 }}>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold block" style={{ color: COLORS.inkDim }}>
-                    Ziel-URL / IP anpassen:
-                  </label>
-                  <input
-                    type="text"
-                    value={qrBaseUrl}
-                    onChange={(e) => setQrBaseUrl(e.target.value)}
-                    placeholder="http://192.168.1.50:8080"
-                    className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-300"
-                    style={{ background: '#fff', color: COLORS.ink }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
-                    <span className="text-[11px] font-bold mb-1" style={{ color: COLORS.ink }}>Player (Auto)</span>
-                    {playerQr ? (
-                      <img src={playerQr} alt="QR Code Player" className="w-24 h-24 object-contain" />
-                    ) : (
-                      <div className="w-24 h-24 flex items-center justify-center text-xs text-gray-400">Lädt...</div>
-                    )}
-                    <a href={`${qrBaseUrl}/player`} target="_blank" rel="noreferrer" className="text-[9px] mt-1 text-amber-600 underline truncate max-w-full">
-                      /player öffnen
-                    </a>
-                  </div>
-
-                  <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
-                    <span className="text-[11px] font-bold mb-1" style={{ color: COLORS.ink }}>Live (Direkt)</span>
-                    {liveQr ? (
-                      <img src={liveQr} alt="QR Code Live" className="w-24 h-24 object-contain" />
-                    ) : (
-                      <div className="w-24 h-24 flex items-center justify-center text-xs text-gray-400">Lädt...</div>
-                    )}
-                    <a href={`${qrBaseUrl}/live`} target="_blank" rel="noreferrer" className="text-[9px] mt-1 text-amber-600 underline truncate max-w-full">
-                      /live öffnen
-                    </a>
-                  </div>
-
-                  <div className="flex flex-col items-center p-2 bg-white rounded-lg shadow-sm">
-                    <span className="text-[11px] font-bold mb-1" style={{ color: COLORS.ink }}>Stage (Direkt)</span>
-                    {stageQr ? (
-                      <img src={stageQr} alt="QR Code Stage" className="w-24 h-24 object-contain" />
-                    ) : (
-                      <div className="w-24 h-24 flex items-center justify-center text-xs text-gray-400">Lädt...</div>
-                    )}
-                    <a href={`${qrBaseUrl}/stage`} target="_blank" rel="noreferrer" className="text-[9px] mt-1 text-amber-600 underline truncate max-w-full">
-                      /stage öffnen
-                    </a>
-                  </div>
-                </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
+
       </div>
     </div>
   );
@@ -2429,32 +2575,40 @@ export default function App() {
         <ProjectionView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} connected={connected} />
       ) : view === 'stage' ? (
         <StageView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} />
-      ) : view === 'editor' ? (
-        <EditorView songs={songs} onChangeSongs={sendSongs} onBack={() => changeView('control')} />
-      ) : view === 'options' ? (
-        <OptionsView playback={playback} onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })} onBack={() => changeView('control')} />
       ) : (
-        <ControlView
-          songs={songs}
-          playback={playback}
-          players={players}
-          localPlayerId={playerId}
-          onSetPlayerRole={sendPlayerRole}
-          onDeletePlayer={sendDeletePlayer}
-          elapsed={elapsed}
-          serverIp={serverIp}
-          serverPort={serverPort}
-          onLoad={loadSong}
-          onTogglePlay={togglePlay}
-          onStop={stopSong}
-          onSeek={seekTo}
-          onNudge={nudge}
-          onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })}
-          onGotoEditor={() => setView('editor')}
-          onGotoProjection={() => changeView('projection')}
-          onGotoOptions={() => setView('options')}
-          onGotoStage={() => changeView('stage')}
-        />
+        <div className="min-h-screen" style={{ background: COLORS.panelBg }}>
+          <TopMenuBar
+            activeView={view}
+            onNavigate={(next) => setView(next)}
+            onGotoProjection={() => changeView('projection')}
+            onGotoStage={() => changeView('stage')}
+            playersCount={Object.keys(players).length}
+          />
+          {view === 'editor' ? (
+            <EditorView songs={songs} onChangeSongs={sendSongs} onBack={() => setView('control')} />
+          ) : view === 'options' ? (
+            <OptionsView playback={playback} onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })} onBack={() => setView('control')} />
+          ) : view === 'players' ? (
+            <PlayersView
+              players={players}
+              localPlayerId={playerId}
+              onSetPlayerRole={sendPlayerRole}
+              onDeletePlayer={sendDeletePlayer}
+              onBack={() => setView('control')}
+            />
+          ) : (
+            <ControlView
+              songs={songs}
+              playback={playback}
+              elapsed={elapsed}
+              onLoad={loadSong}
+              onTogglePlay={togglePlay}
+              onStop={stopSong}
+              onSeek={seekTo}
+              onNudge={nudge}
+            />
+          )}
+        </div>
       )}
     </>
   );
