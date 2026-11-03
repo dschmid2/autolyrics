@@ -9,6 +9,48 @@
 </head>
 <body>
 <div id="root"></div>
-<script src="/bundle.js"></script>
+<script>
+(function() {
+  function checkCapabilities() {
+    // URL override: ?legacy=1 or ?modern=1
+    if (window.location.search.indexOf('legacy=1') !== -1) return false;
+    if (window.location.search.indexOf('modern=1') !== -1) return true;
+
+    // Check basic prerequisites
+    if (!window.WebSocket) return false;
+    if (!window.JSON || !JSON.parse || !JSON.stringify) return false;
+    if (!document.querySelector || !document.addEventListener) return false;
+    if (!Array.prototype.forEach || !Array.prototype.map || !Array.prototype.filter) return false;
+
+    // Check modern ECMAScript capabilities required by React 18 & current bundle
+    try {
+      // Test ES6 classes, arrow functions, spread operator, template literals, const/let, default params
+      new Function('class _Test {}; const fn = (a = 1, ...rest) => ({ a: a, ...{ b: 2 } }); return fn();')();
+    } catch (e) {
+      return false;
+    }
+
+    try {
+      // Test Promise, fetch, Object.assign, Symbol
+      if (typeof Promise === 'undefined' || typeof fetch === 'undefined') return false;
+      if (typeof Object.assign !== 'function' || typeof Symbol === 'undefined') return false;
+    } catch (e) {
+      return false;
+    }
+
+    return true;
+  }
+
+  var isSupported = checkCapabilities();
+  var script = document.createElement('script');
+  if (isSupported) {
+    script.src = '/bundle.js';
+  } else {
+    // Load simple, lightweight legacy script for older browsers (e.g. old iPad / Safari)
+    script.src = '/legacy.js';
+  }
+  document.body.appendChild(script);
+})();
+</script>
 </body>
 </html>
