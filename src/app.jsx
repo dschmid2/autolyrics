@@ -2131,6 +2131,50 @@ function SongEditor({ song, onChange, onDelete }) {
   const update = (patch) => onChange({ ...song, ...patch });
   const updateLine = (id, patch) => update({ lines: song.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
 
+  const handleBarChange = (lineId, newBarVal) => {
+    const lineIndex = song.lines.findIndex((l) => l.id === lineId);
+    if (lineIndex === -1) return;
+    const currentLine = song.lines[lineIndex];
+
+    if (newBarVal === '' || newBarVal === null || newBarVal === undefined) {
+      updateLine(lineId, { bar: '' });
+      return;
+    }
+
+    const parsedNewBar = parseInt(newBarVal, 10);
+    if (isNaN(parsedNewBar)) {
+      updateLine(lineId, { bar: newBarVal });
+      return;
+    }
+
+    const oldBar = currentLine.bar !== undefined && currentLine.bar !== null && currentLine.bar !== ''
+      ? Number(currentLine.bar)
+      : 1;
+
+    const deltaBar = parsedNewBar - oldBar;
+    if (deltaBar === 0) {
+      updateLine(lineId, { bar: parsedNewBar });
+      return;
+    }
+
+    const defaultMode = song.timingMode || 'bar_beat';
+    const updatedLines = song.lines.map((l, idx) => {
+      if (l.id === lineId) {
+        return { ...l, bar: parsedNewBar };
+      }
+      if (idx > lineIndex) {
+        const lMode = l.mode || defaultMode;
+        if (lMode === 'bar_beat') {
+          const curBar = l.bar !== undefined && l.bar !== null && l.bar !== '' ? Number(l.bar) : 1;
+          return { ...l, bar: Math.max(1, curBar + deltaBar) };
+        }
+      }
+      return l;
+    });
+
+    update({ lines: updatedLines });
+  };
+
   const currentTimingMode = song.timingMode || 'bar_beat';
 
   const handleTimingModeChange = (newMode) => {
@@ -2145,10 +2189,57 @@ function SongEditor({ song, onChange, onDelete }) {
     update({ timingMode: newMode, lines: updatedLines });
   };
 
-  const addLine = () => {
+  const insertLine = (index) => {
     const defaultMode = song.timingMode || 'bar_beat';
-    const newTimingProps = defaultMode === 'bar_beat' ? { bar: 1, beat: 1 } : { timeSec: 0 };
-    update({ lines: [...song.lines, { id: uid(), en: '', de: '', mode: defaultMode, duration: '', ...newTimingProps }] });
+    const lines = [...song.lines];
+    let newTimingProps = defaultMode === 'bar_beat' ? { bar: 1, beat: 1 } : { timeSec: 0 };
+
+    if (lines.length > 0 && index >= 0 && index < lines.length) {
+      const prevLine = lines[index];
+      const prevMode = prevLine.mode || defaultMode;
+      if (prevMode === 'bar_beat') {
+        const prevBar = prevLine.bar !== undefined && prevLine.bar !== null && prevLine.bar !== '' ? Number(prevLine.bar) : 1;
+        newTimingProps = { bar: prevBar + 1, beat: 1 };
+      } else if (prevMode === 'sec') {
+        const prevSec = prevLine.timeSec !== undefined && prevLine.timeSec !== null ? Number(prevLine.timeSec) : 0;
+        newTimingProps = { timeSec: Math.round((prevSec + 2) * 10) / 10 };
+      } else if (prevMode === 'beat') {
+        const prevBeat = prevLine.beat !== undefined && prevLine.beat !== null ? Number(prevLine.beat) : 1;
+        newTimingProps = { beat: prevBeat + (song.timeSigNum || 4) };
+      } else if (prevMode === 'relative') {
+        newTimingProps = { relativeSec: 2 };
+      } else if (prevMode === 'relative_bar_beat') {
+        newTimingProps = { relativeBar: 1, relativeBeat: 0 };
+      }
+    } else if (lines.length > 0 && index === -1) {
+      // inserting before the first line
+      const firstLine = lines[0];
+      const firstMode = firstLine.mode || defaultMode;
+      if (firstMode === 'bar_beat') {
+        newTimingProps = { bar: 1, beat: 1 };
+      }
+    }
+
+    const newLine = { id: uid(), en: '', de: '', mode: defaultMode, duration: '', ...newTimingProps };
+    const insertIdx = index + 1; // insert after index
+    lines.splice(insertIdx, 0, newLine);
+
+    // If inserted line has bar_beat, shift subsequent bar_beat lines if their bar is <= newLine.bar
+    if (defaultMode === 'bar_beat' && newLine.bar !== undefined) {
+      for (let i = insertIdx + 1; i < lines.length; i++) {
+        const lMode = lines[i].mode || defaultMode;
+        if (lMode === 'bar_beat') {
+          const curBar = lines[i].bar !== undefined && lines[i].bar !== null && lines[i].bar !== '' ? Number(lines[i].bar) : 1;
+          lines[i] = { ...lines[i], bar: curBar + 1 };
+        }
+      }
+    }
+
+    update({ lines });
+  };
+
+  const addLine = () => {
+    insertLine(song.lines.length - 1);
   };
 
   const removeLine = (id) => update({ lines: song.lines.filter((l) => l.id !== id) });
@@ -2306,10 +2397,22 @@ function SongEditor({ song, onChange, onDelete }) {
 
       {/* Lyric Line Textfields */}
       <div className="space-y-2">
-        <div className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.inkDim }}>
-          Songzeilen &amp; Marker-Zeitstempel
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.inkDim }}>
+            Songzeilen &amp; Marker-Zeitstempel
+          </div>
+          {song.lines.length > 0 && (
+            <button
+              onClick={() => insertLine(-1)}
+              title="Zeile ganz oben einfügen"
+              className="text-xs px-2 py-0.5 rounded flex items-center gap-1 font-medium bg-white hover:bg-black/5"
+              style={{ color: COLORS.ink }}
+            >
+              <Plus size={12} /> Am Anfang einfügen
+            </button>
+          )}
         </div>
-        {song.lines.map((l) => {
+        {song.lines.map((l, idx) => {
           const computedLine = computedLines.find((cl) => cl.id === l.id);
           const t = computedLine ? computedLine.t : 0;
           return (
@@ -2376,7 +2479,7 @@ function SongEditor({ song, onChange, onDelete }) {
                 {(l.mode === 'bar_beat' || !l.mode) && (
                   <div className="flex items-center gap-1">
                     <span style={{ color: COLORS.inkDim }}>Takt:</span>
-                    <input type="number" step="1" min="1" value={l.bar !== undefined && l.bar !== null ? l.bar : 1} onChange={(e) => updateLine(l.id, { bar: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                    <input type="number" step="1" min="1" value={l.bar !== undefined && l.bar !== null ? l.bar : 1} onChange={(e) => handleBarChange(l.id, e.target.value)} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
                     <span style={{ color: COLORS.inkDim }}>Schlag:</span>
                     <input type="number" step="1" min="1" max={song.timeSigNum || 4} value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
                   </div>
@@ -2397,6 +2500,7 @@ function SongEditor({ song, onChange, onDelete }) {
                 <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>≈ {fmtTime(t)}</span>
 
                 <div className="flex gap-1 ml-auto">
+                  <button onClick={() => insertLine(idx)} title="Zeile danach einfügen" aria-label="Zeile danach einfügen" className="p-1 rounded hover:bg-black/10 bg-white"><Plus size={14} /></button>
                   <button onClick={() => moveLine(l.id, -1)} aria-label="Zeile nach oben" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronUp size={14} /></button>
                   <button onClick={() => moveLine(l.id, 1)} aria-label="Zeile nach unten" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronDown size={14} /></button>
                   <button onClick={() => removeLine(l.id)} aria-label="Zeile löschen" className="p-1 rounded hover:bg-black/10 bg-white"><Trash2 size={14} color={COLORS.danger} /></button>
