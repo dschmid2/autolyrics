@@ -87,6 +87,15 @@ function getOrCreatePlayerId() {
   }
 }
 
+function getBarBeat(time, bpm = 90, timeSigNum = 4) {
+  const safeBpm = Number(bpm) || 90;
+  const safeTimeSig = Number(timeSigNum) || 4;
+  const beats = Math.max(0, time * (safeBpm / 60));
+  const bar = Math.floor(beats / safeTimeSig + 1e-4) + 1;
+  const beat = Math.floor((beats + 1e-4) % safeTimeSig) + 1;
+  return { bar, beat };
+}
+
 function computeLinesWithTimes(song) {
   if (!song || !Array.isArray(song.lines)) return [];
   const bpm = Number(song.bpm) || 90;
@@ -99,6 +108,9 @@ function computeLinesWithTimes(song) {
     const l = song.lines[i];
     const mode = l.mode || defaultMode;
     let t = 0;
+    let bar = l.bar !== undefined && l.bar !== null ? Number(l.bar) : undefined;
+    let beat = l.beat !== undefined && l.beat !== null ? Number(l.beat) : undefined;
+
     if (mode === 'sec') {
       t = Number(l.timeSec) || 0;
     } else if (mode === 'relative') {
@@ -110,19 +122,25 @@ function computeLinesWithTimes(song) {
       const totalBeats = relBar * timeSigNum + relBeat;
       t = prevTime + totalBeats * (60 / bpm);
     } else if (mode === 'bar_beat') {
-      const bar = Number(l.bar) || 1;
-      const beat = Number(l.beat) || 1;
+      bar = Number(l.bar) || 1;
+      beat = Number(l.beat) || 1;
       const totalBeats = (bar - 1) * timeSigNum + (beat - 1);
       t = Math.max(0, totalBeats * (60 / bpm));
     } else if (mode === 'beat') {
-      const beat = Number(l.beat) || 1;
+      beat = Number(l.beat) || 1;
       t = Math.max(0, (beat - 1) * 60 / bpm);
     } else {
       t = Number(l.timeSec) || 0;
     }
 
+    if (bar === undefined || beat === undefined || mode !== 'bar_beat') {
+      const bb = getBarBeat(t, bpm, timeSigNum);
+      bar = bb.bar;
+      beat = bb.beat;
+    }
+
     const duration = l.duration !== undefined && l.duration !== null && l.duration !== '' ? Number(l.duration) : null;
-    lines.push({ ...l, mode, t, duration });
+    lines.push({ ...l, mode, t, duration, bar, beat });
     prevTime = t;
   }
 
@@ -982,7 +1000,7 @@ function useSongCompleted(lines, playback) {
 
 // --- Views ------------------------------------------------------------------
 
-function OptionsView({ playback, onChangePlayback, onBack }) {
+function OptionsView({ playback, onChangePlayback }) {
   const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
   const translationPercent = playback.translationPercent !== undefined ? playback.translationPercent : 60;
   const translationSpacing = playback.translationSpacing !== undefined ? playback.translationSpacing : 24;
@@ -998,148 +1016,171 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
 
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
-      <div className="p-4 space-y-4 max-w-md mx-auto">
-        <div className="flex items-center justify-between mb-4">
+      <div className="max-w-[1200px] w-full mx-auto p-4 md:px-8 space-y-6">
+        <div>
           <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Anzeige-Optionen</h1>
-          <button onClick={onBack} className="text-sm px-3 py-1.5 rounded-lg" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>Zurück</button>
+          <p className="text-xs" style={{ color: COLORS.inkDim }}>
+            Einstellungen für Projektion (Live-View) und Bühnenanzeige (Stageview).
+          </p>
         </div>
 
-        <div className="rounded-xl p-4 space-y-4" style={{ background: COLORS.panelBg2 }}>
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Schriftgrösse Projektion (Live-View)</span>
-              <span className="font-mono">{fontSize}px</span>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          {/* Card 1: Live-View (Projektion) */}
+          <div className="rounded-2xl p-5 space-y-4 shadow-sm" style={{ background: COLORS.panelBg2 }}>
+            <div className="border-b pb-2 flex items-center justify-between" style={{ borderColor: COLORS.line }}>
+              <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: COLORS.ink }}>
+                Projektion (Live-View)
+              </h2>
+              <span className="text-xs px-2 py-0.5 rounded font-mono font-medium bg-black/5" style={{ color: COLORS.inkDim }}>
+                /live
+              </span>
             </div>
-            <input
-              type="range"
-              min="20"
-              max="120"
-              value={fontSize}
-              onChange={(e) => onChangePlayback({ fontSize: Number(e.target.value) })}
-              className="w-full accent-amber"
-            />
-          </div>
 
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Grösse Übersetzung</span>
-              <span className="font-mono">{translationPercent}%</span>
-            </div>
-            <input
-              type="range"
-              min="30"
-              max="100"
-              value={translationPercent}
-              onChange={(e) => onChangePlayback({ translationPercent: Number(e.target.value) })}
-              className="w-full accent-amber"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Abstand zwischen Text und Übersetzung</span>
-              <span className="font-mono">{translationSpacing}px</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={translationSpacing}
-              onChange={(e) => onChangePlayback({ translationSpacing: Number(e.target.value) })}
-              className="w-full accent-amber"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Position X (Zentrum)</span>
-                <span className="font-mono">{positionX}%</span>
+                <span>Schriftgrösse Projektion</span>
+                <span className="font-mono">{fontSize}px</span>
+              </div>
+              <input
+                type="range"
+                min="20"
+                max="120"
+                value={fontSize}
+                onChange={(e) => onChangePlayback({ fontSize: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Grösse Übersetzung</span>
+                <span className="font-mono">{translationPercent}%</span>
+              </div>
+              <input
+                type="range"
+                min="30"
+                max="100"
+                value={translationPercent}
+                onChange={(e) => onChangePlayback({ translationPercent: Number(e.target.value) })}
+                className="w-full accent-amber"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Abstand zwischen Text und Übersetzung</span>
+                <span className="font-mono">{translationSpacing}px</span>
               </div>
               <input
                 type="range"
                 min="0"
                 max="100"
-                value={positionX}
-                onChange={(e) => onChangePlayback({ positionX: Number(e.target.value) })}
+                value={translationSpacing}
+                onChange={(e) => onChangePlayback({ translationSpacing: Number(e.target.value) })}
                 className="w-full accent-amber"
               />
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                  <span>Position X (Zentrum)</span>
+                  <span className="font-mono">{positionX}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={positionX}
+                  onChange={(e) => onChangePlayback({ positionX: Number(e.target.value) })}
+                  className="w-full accent-amber"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
+                  <span>Position Y (Zentrum)</span>
+                  <span className="font-mono">{positionY}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={positionY}
+                  onChange={(e) => onChangePlayback({ positionY: Number(e.target.value) })}
+                  className="w-full accent-amber"
+                />
+              </div>
+            </div>
+
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Position Y (Zentrum)</span>
-                <span className="font-mono">{positionY}%</span>
+                <span>Breite Bildbereich</span>
+                <span className="font-mono">{liveWidthPercent}%</span>
               </div>
               <input
                 type="range"
-                min="0"
+                min="10"
                 max="100"
-                value={positionY}
-                onChange={(e) => onChangePlayback({ positionY: Number(e.target.value) })}
+                value={liveWidthPercent}
+                onChange={(e) => onChangePlayback({ liveWidthPercent: Number(e.target.value) })}
                 className="w-full accent-amber"
               />
             </div>
-          </div>
 
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Breite Bildbereich</span>
-              <span className="font-mono">{liveWidthPercent}%</span>
+            <div className="space-y-1">
+              <div className="text-xs" style={{ color: COLORS.inkDim }}>
+                <span>Textausrichtung</span>
+              </div>
+              <div className="flex gap-2 pt-1">
+                {[
+                  { value: 'left', label: 'Links' },
+                  { value: 'center', label: 'Mittig' },
+                  { value: 'right', label: 'Rechts' }
+                ].map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => onChangePlayback({ liveTextAlign: value })}
+                    className={`flex-1 py-1.5 px-3 text-xs rounded-lg font-medium transition-colors ${
+                      liveTextAlign === value
+                        ? 'bg-amber text-zinc-950 font-bold'
+                        : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <input
-              type="range"
-              min="10"
-              max="100"
-              value={liveWidthPercent}
-              onChange={(e) => onChangePlayback({ liveWidthPercent: Number(e.target.value) })}
-              className="w-full accent-amber"
-            />
-          </div>
 
-          <div className="space-y-1">
-            <div className="text-xs" style={{ color: COLORS.inkDim }}>
-              <span>Textausrichtung</span>
-            </div>
-            <div className="flex gap-2 pt-1">
-              {[
-                { value: 'left', label: 'Links' },
-                { value: 'center', label: 'Mittig' },
-                { value: 'right', label: 'Rechts' }
-              ].map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => onChangePlayback({ liveTextAlign: value })}
-                  className={`flex-1 py-1.5 px-3 text-xs rounded-lg font-medium transition-colors ${
-                    liveTextAlign === value
-                      ? 'bg-amber text-zinc-950 font-bold'
-                      : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="flex items-center gap-2 pt-1 border-t" style={{ borderColor: COLORS.line }}>
+              <input
+                type="checkbox"
+                id="showHeartbeat"
+                checked={showHeartbeat}
+                onChange={(e) => onChangePlayback({ showHeartbeat: e.target.checked })}
+                className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 accent-amber"
+              />
+              <label htmlFor="showHeartbeat" className="text-xs font-medium cursor-pointer" style={{ color: COLORS.ink }}>
+                Pulsierender Punkt (Heartbeat) aktivieren
+              </label>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="showHeartbeat"
-              checked={showHeartbeat}
-              onChange={(e) => onChangePlayback({ showHeartbeat: e.target.checked })}
-              className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 accent-amber"
-            />
-            <label htmlFor="showHeartbeat" className="text-xs font-medium cursor-pointer" style={{ color: COLORS.ink }}>
-              Pulsierender Punkt (Heartbeat) aktivieren
-            </label>
-          </div>
+          {/* Card 2: Stage-View (Bühnenanzeige) */}
+          <div className="rounded-2xl p-5 space-y-4 shadow-sm" style={{ background: COLORS.panelBg2 }}>
+            <div className="border-b pb-2 flex items-center justify-between" style={{ borderColor: COLORS.line }}>
+              <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: COLORS.ink }}>
+                Bühnenanzeige (Stage-View)
+              </h2>
+              <span className="text-xs px-2 py-0.5 rounded font-mono font-medium bg-black/5" style={{ color: COLORS.inkDim }}>
+                /stage
+              </span>
+            </div>
 
-          <div className="border-t pt-3 mt-3 space-y-3" style={{ borderColor: COLORS.line }}>
-            <h3 className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.ink }}>Stage-View Optionen</h3>
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Schriftgrösse (Stage-View)</span>
+                <span>Schriftgrösse Stage-View</span>
                 <span className="font-mono">{playback.stageFontSize !== undefined ? playback.stageFontSize : 64}px</span>
               </div>
               <input
@@ -1154,7 +1195,7 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
 
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Zeilenabstand (Stage-View)</span>
+                <span>Zeilenabstand Stage-View</span>
                 <span className="font-mono">{playback.stageLineSpacing !== undefined ? playback.stageLineSpacing : 24}px</span>
               </div>
               <input
@@ -1169,7 +1210,7 @@ function OptionsView({ playback, onChangePlayback, onBack }) {
 
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Vertikale Position (Stage-View)</span>
+                <span>Vertikale Position Stage-View</span>
                 <span className="font-mono">{stagePositionY > 0 ? `+${stagePositionY}` : stagePositionY}%</span>
               </div>
               <input
@@ -1599,7 +1640,7 @@ function ProjectionView({ songs, playback, onExit, connected }) {
   );
 }
 
-function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePlayer, onBack }) {
+function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePlayer }) {
   const playerList = Object.values(players);
 
   return (
@@ -1612,15 +1653,6 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
               Verbundene Geräte verwalten und Rollen (Projektion / Stageview) zuweisen.
             </p>
           </div>
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="text-sm px-3 py-1.5 rounded-lg transition-colors hover:bg-black/5"
-              style={{ background: COLORS.panelBg2, color: COLORS.ink }}
-            >
-              Zurück
-            </button>
-          )}
         </div>
 
         <div className="rounded-xl p-5 space-y-4 shadow-sm" style={{ background: COLORS.panelBg2 }}>
@@ -1727,17 +1759,17 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
 
   return (
     <header className="sticky top-0 z-40 w-full border-b backdrop-blur-md transition-colors" style={{ background: COLORS.panelBg + 'ee', borderColor: COLORS.line }}>
-      <div className="max-w-[1800px] mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
+      <div className="max-w-[1200px] mx-auto px-3 sm:px-4 md:px-8 flex items-center justify-between h-14">
         {/* Left: Brand & Navigation */}
-        <div className="flex items-center gap-3 sm:gap-6 overflow-x-auto py-1">
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="font-bold text-base tracking-tight" style={{ color: COLORS.ink }}>Autolyrics</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
+        <div className="flex items-center gap-2 sm:gap-6 overflow-x-auto py-1 min-w-0 no-scrollbar">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <span className="font-bold text-sm sm:text-base tracking-tight" style={{ color: COLORS.ink }}>Autolyrics</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded hidden sm:inline" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
               v{versionData.version}
             </span>
           </div>
 
-          <nav className="flex items-center gap-1 sm:gap-2">
+          <nav className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar py-0.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeView === item.id;
@@ -1745,7 +1777,7 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
                 <button
                   key={item.id}
                   onClick={() => onNavigate(item.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                  className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap shrink-0 transition-all ${
                     isActive
                       ? 'shadow-sm font-semibold'
                       : 'hover:bg-black/5 opacity-80 hover:opacity-100'
@@ -1756,7 +1788,10 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
                   }}
                 >
                   <Icon size={15} />
-                  <span>{item.label}</span>
+                  <span className="hidden sm:inline">{item.label}</span>
+                  <span className="sm:hidden">
+                    {item.id === 'control' ? 'Steuerung' : item.id === 'editor' ? 'Editor' : item.id === 'players' ? `Player${playersCount > 0 ? ` (${playersCount})` : ''}` : 'Optionen'}
+                  </span>
                 </button>
               );
             })}
@@ -1764,24 +1799,24 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
         </div>
 
         {/* Right: Quick actions for Live & Stage View */}
-        <div className="flex items-center gap-2 shrink-0 ml-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-2">
           <button
             onClick={onGotoProjection}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
             style={{ background: COLORS.ink, color: COLORS.stageText }}
             title="Projektionsansicht (/live) öffnen"
           >
             <Eye size={14} />
-            <span className="hidden sm:inline">Projektion</span>
+            <span className="hidden md:inline">Projektion</span>
           </button>
           <button
             onClick={onGotoStage}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
             style={{ background: COLORS.ink, color: COLORS.stageText }}
             title="Stageview-Ansicht (/stage) öffnen"
           >
             <Tv size={14} />
-            <span className="hidden sm:inline">Stageview</span>
+            <span className="hidden md:inline">Stageview</span>
           </button>
         </div>
       </div>
@@ -1798,12 +1833,17 @@ function ControlView({
   onStop,
   onSeek,
   onNudge,
+  onPlayFromLine,
 }) {
   const song = useMemo(() => songs.find((s) => s.id === playback.songId) || null, [songs, playback.songId]);
   const lines = useMemo(() => (song ? sortedLines(song) : []), [song]);
   const idx = song ? currentIndex(lines, elapsed) : -1;
   const duration = getSongDuration(lines);
+  const { bar: currentBar, beat: currentBeat } = song
+    ? getBarBeat(elapsed, song.bpm, song.timeSigNum)
+    : { bar: 1, beat: 1 };
 
+  const handleLineClick = onPlayFromLine || onSeek;
   const activeLineRef = useRef(null);
 
   // Auto-scroll active lyric line into view if it changes
@@ -1818,7 +1858,7 @@ function ControlView({
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] pb-10" style={{ background: COLORS.panelBg }}>
-      <div className="max-w-[1800px] w-full mx-auto p-4 md:px-8 space-y-6">
+      <div className="max-w-[1200px] w-full mx-auto p-4 md:px-8 space-y-6">
 
         {/* Primary Playback Control Bar */}
         <div className="rounded-2xl p-5 shadow-sm space-y-4" style={{ background: COLORS.panelBg2 }}>
@@ -1842,53 +1882,80 @@ function ControlView({
             </div>
 
             {/* Main Playback Buttons */}
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap justify-center">
               <button
                 onClick={() => onNudge(-5)}
                 disabled={!song}
                 aria-label="5 Sekunden zurück"
-                className="p-3 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none"
+                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
                 style={{ background: '#fff' }}
-                title="5 Sekunden zurück"
+                title="5 Sekunden zurück (Schnellvorlauf)"
               >
-                <SkipBack size={20} color={COLORS.ink} />
+                <Rewind size={16} className="sm:w-4 sm:h-4" color={COLORS.ink} />
+                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>-5s</span>
+              </button>
+
+              <button
+                onClick={() => onNudge(-1)}
+                disabled={!song}
+                aria-label="1 Sekunde zurück"
+                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
+                style={{ background: '#fff' }}
+                title="1 Sekunde zurück"
+              >
+                <ChevronLeft size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
+                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>-1s</span>
               </button>
 
               <button
                 onClick={onTogglePlay}
                 disabled={!song}
                 aria-label={playback.status === 'playing' ? 'Pause und Schwarz' : 'Start'}
-                className="p-4 sm:p-5 rounded-full shadow-md hover:scale-105 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none"
+                className="p-3.5 sm:p-5 rounded-full shadow-md hover:scale-105 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none"
                 style={{ background: COLORS.amber }}
                 title={playback.status === 'playing' ? 'Pausieren (Projektion wird schwarz)' : 'Abspielen'}
               >
                 {playback.status === 'playing' ? (
-                  <Pause size={28} color="#241a08" />
+                  <Pause size={24} className="sm:w-7 sm:h-7" color="#241a08" />
                 ) : (
-                  <Play size={28} color="#241a08" className="translate-x-0.5" />
+                  <Play size={24} className="sm:w-7 sm:h-7 translate-x-0.5" color="#241a08" />
                 )}
+              </button>
+
+              <button
+                onClick={() => onNudge(1)}
+                disabled={!song}
+                aria-label="1 Sekunde vor"
+                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
+                style={{ background: '#fff' }}
+                title="1 Sekunde vor"
+              >
+                <ChevronRight size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
+                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>+1s</span>
               </button>
 
               <button
                 onClick={() => onNudge(5)}
                 disabled={!song}
                 aria-label="5 Sekunden vor"
-                className="p-3 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none"
+                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
                 style={{ background: '#fff' }}
-                title="5 Sekunden vor"
+                title="5 Sekunden vor (Schnellvorlauf)"
               >
-                <SkipForward size={20} color={COLORS.ink} />
+                <FastForward size={16} className="sm:w-4 sm:h-4" color={COLORS.ink} />
+                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>+5s</span>
               </button>
 
               <button
                 onClick={onStop}
                 disabled={!song}
-                className="px-3.5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition hover:bg-black/10 active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+                className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition hover:bg-black/10 active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
                 style={{ background: '#fff', color: COLORS.inkDim }}
                 title="Stoppt die Wiedergabe und schaltet die Projektion schwarz"
               >
                 <Square size={13} />
-                <span>Stopp &amp; Schwarz</span>
+                <span className="hidden sm:inline">Stopp &amp; Schwarz</span>
+                <span className="sm:hidden">Stopp</span>
               </button>
 
               {songs.length > 1 && (
@@ -1900,30 +1967,34 @@ function ControlView({
                       onLoad(songs[nextIdx]);
                     }
                   }}
-                  className="px-3.5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition hover:opacity-90 active:scale-95"
+                  className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition hover:opacity-90 active:scale-95"
                   style={{ background: COLORS.amber, color: '#241a08' }}
                   title="Nächsten Song aus der Liste laden"
                 >
-                  <span>Nächster Song</span>
+                  <span className="hidden sm:inline">Nächster Song</span>
+                  <span className="sm:hidden">Weiter</span>
                   <SkipForward size={13} />
                 </button>
               )}
             </div>
 
-            {/* Elapsed / Duration Time pill */}
-            <div className="font-mono text-sm px-3.5 py-2 rounded-xl shrink-0 font-bold bg-white/70 shadow-sm" style={{ color: COLORS.ink }}>
-              {fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}
-            </div>
           </div>
 
           {/* Current Live Line Preview Banner */}
           {song && (
             <div className="rounded-xl p-4 shadow-inner" style={{ background: COLORS.ink }}>
-              <div className="flex items-center justify-between text-xs mb-1.5" style={{ color: COLORS.line }}>
-                <span className="uppercase tracking-wider font-semibold opacity-70">
+              <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                <span className="text-xs uppercase tracking-wider font-semibold opacity-70" style={{ color: COLORS.line }}>
                   {playback.status === 'playing' ? 'Aktuelle Zeile (Live)' : 'Status'}
                 </span>
-                <span>{fmtTime(elapsed)} / {fmtTime(duration)}</span>
+                <div
+                  className="font-mono text-sm sm:text-base font-bold px-3 py-1 rounded-lg shadow-sm flex items-center gap-2"
+                  style={{ background: COLORS.panelBg, color: COLORS.ink }}
+                >
+                  <span>{fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}</span>
+                  <span className="opacity-30">·</span>
+                  <span>Takt {currentBar}/{currentBeat}</span>
+                </div>
               </div>
               <div className="text-lg sm:text-xl font-bold min-h-[1.75rem]" style={{ color: COLORS.stageText }}>
                 {idx >= 0 ? lines[idx].en : (playback.status === 'playing' ? '…' : '— Schwarz —')}
@@ -1948,7 +2019,7 @@ function ControlView({
               </span>
             </div>
 
-            <div className="space-y-2 max-h-[calc(100vh-22rem)] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-48 md:max-h-[calc(100vh-22rem)] overflow-y-auto pr-1">
               {songs.map((s) => {
                 const isSelected = s.id === playback.songId;
                 return (
@@ -1982,7 +2053,7 @@ function ControlView({
           <div className="flex-1 min-w-0 w-full space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs uppercase tracking-wider font-bold" style={{ color: COLORS.inkDim }}>
-                Songzeilen {lines.length > 0 ? `(${lines.length}) – Klick springt zur Zeile` : ''}
+                Songzeilen {lines.length > 0 ? `(${lines.length}) – Klick startet ab dieser Zeile` : ''}
               </span>
               {song && (
                 <span className="text-xs" style={{ color: COLORS.inkDim }}>
@@ -2010,7 +2081,7 @@ function ControlView({
                     <button
                       key={l.id}
                       ref={isActive ? activeLineRef : null}
-                      onClick={() => onSeek(l.t)}
+                      onClick={() => handleLineClick(l.t)}
                       className={`w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all ${
                         isActive
                           ? 'shadow-md scale-[1.01]'
@@ -2047,6 +2118,13 @@ function ControlView({
                           </div>
                         )}
                       </div>
+
+                      <span
+                        className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70 bg-black/5 whitespace-nowrap self-start"
+                        title={`Takt ${l.bar}/${l.beat}`}
+                      >
+                        Takt {l.bar}/{l.beat}
+                      </span>
                     </button>
                   );
                 })}
@@ -2176,6 +2254,50 @@ function SongEditor({ song, onChange, onDelete }) {
   const update = (patch) => onChange({ ...song, ...patch });
   const updateLine = (id, patch) => update({ lines: song.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
 
+  const handleBarChange = (lineId, newBarVal) => {
+    const lineIndex = song.lines.findIndex((l) => l.id === lineId);
+    if (lineIndex === -1) return;
+    const currentLine = song.lines[lineIndex];
+
+    if (newBarVal === '' || newBarVal === null || newBarVal === undefined) {
+      updateLine(lineId, { bar: '' });
+      return;
+    }
+
+    const parsedNewBar = parseInt(newBarVal, 10);
+    if (isNaN(parsedNewBar)) {
+      updateLine(lineId, { bar: newBarVal });
+      return;
+    }
+
+    const oldBar = currentLine.bar !== undefined && currentLine.bar !== null && currentLine.bar !== ''
+      ? Number(currentLine.bar)
+      : 1;
+
+    const deltaBar = parsedNewBar - oldBar;
+    if (deltaBar === 0) {
+      updateLine(lineId, { bar: parsedNewBar });
+      return;
+    }
+
+    const defaultMode = song.timingMode || 'bar_beat';
+    const updatedLines = song.lines.map((l, idx) => {
+      if (l.id === lineId) {
+        return { ...l, bar: parsedNewBar };
+      }
+      if (idx > lineIndex) {
+        const lMode = l.mode || defaultMode;
+        if (lMode === 'bar_beat') {
+          const curBar = l.bar !== undefined && l.bar !== null && l.bar !== '' ? Number(l.bar) : 1;
+          return { ...l, bar: Math.max(1, curBar + deltaBar) };
+        }
+      }
+      return l;
+    });
+
+    update({ lines: updatedLines });
+  };
+
   const currentTimingMode = song.timingMode || 'bar_beat';
 
   const handleTimingModeChange = (newMode) => {
@@ -2190,10 +2312,47 @@ function SongEditor({ song, onChange, onDelete }) {
     update({ timingMode: newMode, lines: updatedLines });
   };
 
-  const addLine = () => {
+  const insertLine = (index) => {
     const defaultMode = song.timingMode || 'bar_beat';
-    const newTimingProps = defaultMode === 'bar_beat' ? { bar: 1, beat: 1 } : { timeSec: 0 };
-    update({ lines: [...song.lines, { id: uid(), en: '', de: '', mode: defaultMode, duration: '', ...newTimingProps }] });
+    const lines = [...song.lines];
+    let newTimingProps = defaultMode === 'bar_beat' ? { bar: 1, beat: 1 } : { timeSec: 0 };
+
+    if (lines.length > 0 && index >= 0 && index < lines.length) {
+      const prevLine = lines[index];
+      const prevMode = prevLine.mode || defaultMode;
+      if (prevMode === 'bar_beat') {
+        const prevBar = prevLine.bar !== undefined && prevLine.bar !== null && prevLine.bar !== '' ? Number(prevLine.bar) : 1;
+        newTimingProps = { bar: prevBar, beat: 1 };
+      } else if (prevMode === 'sec') {
+        const prevSec = prevLine.timeSec !== undefined && prevLine.timeSec !== null ? Number(prevLine.timeSec) : 0;
+        newTimingProps = { timeSec: Math.round((prevSec + 2) * 10) / 10 };
+      } else if (prevMode === 'beat') {
+        const prevBeat = prevLine.beat !== undefined && prevLine.beat !== null ? Number(prevLine.beat) : 1;
+        newTimingProps = { beat: prevBeat };
+      } else if (prevMode === 'relative') {
+        newTimingProps = { relativeSec: 2 };
+      } else if (prevMode === 'relative_bar_beat') {
+        newTimingProps = { relativeBar: 1, relativeBeat: 0 };
+      }
+    } else if (lines.length > 0 && index === -1) {
+      // inserting before the first line
+      const firstLine = lines[0];
+      const firstMode = firstLine.mode || defaultMode;
+      if (firstMode === 'bar_beat') {
+        const firstBar = firstLine.bar !== undefined && firstLine.bar !== null && firstLine.bar !== '' ? Number(firstLine.bar) : 1;
+        newTimingProps = { bar: firstBar, beat: 1 };
+      }
+    }
+
+    const newLine = { id: uid(), en: '', de: '', mode: defaultMode, duration: '', ...newTimingProps };
+    const insertIdx = index + 1; // insert after index
+    lines.splice(insertIdx, 0, newLine);
+
+    update({ lines });
+  };
+
+  const addLine = () => {
+    insertLine(song.lines.length - 1);
   };
 
   const removeLine = (id) => update({ lines: song.lines.filter((l) => l.id !== id) });
@@ -2351,10 +2510,22 @@ function SongEditor({ song, onChange, onDelete }) {
 
       {/* Lyric Line Textfields */}
       <div className="space-y-2">
-        <div className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.inkDim }}>
-          Songzeilen &amp; Marker-Zeitstempel
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.inkDim }}>
+            Songzeilen &amp; Marker-Zeitstempel
+          </div>
+          {song.lines.length > 0 && (
+            <button
+              onClick={() => insertLine(-1)}
+              title="Zeile ganz oben einfügen"
+              className="text-xs px-2 py-0.5 rounded flex items-center gap-1 font-medium bg-white hover:bg-black/5"
+              style={{ color: COLORS.ink }}
+            >
+              <Plus size={12} /> Am Anfang einfügen
+            </button>
+          )}
         </div>
-        {song.lines.map((l) => {
+        {song.lines.map((l, idx) => {
           const computedLine = computedLines.find((cl) => cl.id === l.id);
           const t = computedLine ? computedLine.t : 0;
           return (
@@ -2421,7 +2592,7 @@ function SongEditor({ song, onChange, onDelete }) {
                 {(l.mode === 'bar_beat' || !l.mode) && (
                   <div className="flex items-center gap-1">
                     <span style={{ color: COLORS.inkDim }}>Takt:</span>
-                    <input type="number" step="1" min="1" value={l.bar !== undefined && l.bar !== null ? l.bar : 1} onChange={(e) => updateLine(l.id, { bar: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                    <input type="number" step="1" min="1" value={l.bar !== undefined && l.bar !== null ? l.bar : 1} onChange={(e) => handleBarChange(l.id, e.target.value)} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
                     <span style={{ color: COLORS.inkDim }}>Schlag:</span>
                     <input type="number" step="1" min="1" max={song.timeSigNum || 4} value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
                   </div>
@@ -2442,6 +2613,7 @@ function SongEditor({ song, onChange, onDelete }) {
                 <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>≈ {fmtTime(t)}</span>
 
                 <div className="flex gap-1 ml-auto">
+                  <button onClick={() => insertLine(idx)} title="Zeile danach einfügen" aria-label="Zeile danach einfügen" className="p-1 rounded hover:bg-black/10 bg-white"><Plus size={14} /></button>
                   <button onClick={() => moveLine(l.id, -1)} aria-label="Zeile nach oben" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronUp size={14} /></button>
                   <button onClick={() => moveLine(l.id, 1)} aria-label="Zeile nach unten" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronDown size={14} /></button>
                   <button onClick={() => removeLine(l.id)} aria-label="Zeile löschen" className="p-1 rounded hover:bg-black/10 bg-white"><Trash2 size={14} color={COLORS.danger} /></button>
@@ -2474,7 +2646,7 @@ function SongEditor({ song, onChange, onDelete }) {
   );
 }
 
-function EditorView({ songs, onChangeSongs, onBack }) {
+function EditorView({ songs, onChangeSongs }) {
   const [selectedId, setSelectedId] = useState(songs[0] ? songs[0].id : null);
   const selected = songs.find((s) => s.id === selectedId) || null;
 
@@ -2502,13 +2674,13 @@ function EditorView({ songs, onChangeSongs, onBack }) {
 
   return (
     <div className="min-h-screen" style={{ background: COLORS.panelBg }}>
-      <div className="max-w-[1800px] w-full mx-auto p-4 md:px-8">
+      <div className="max-w-[1200px] w-full mx-auto p-4 md:px-8">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Songs verwalten</h1>
-          <button onClick={onBack} className="text-sm px-3 py-1.5 rounded-lg" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>Zur Steuerung</button>
         </div>
         <div className="flex flex-col md:flex-row gap-6">
-          <div className="md:w-64 shrink-0 space-y-2">
+          <div className="w-full md:w-64 shrink-0 space-y-2">
+            <div className="space-y-2 max-h-48 md:max-h-none overflow-y-auto pr-1">
             {songs.map((s, index) => (
               <div
                 key={s.id}
@@ -2542,6 +2714,7 @@ function EditorView({ songs, onChangeSongs, onBack }) {
                 </div>
               </div>
             ))}
+            </div>
             <button onClick={addSong} className="w-full text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}><Plus size={14} /> Neuer Song</button>
           </div>
           <div className="flex-1 min-w-0">
@@ -2617,6 +2790,14 @@ export default function App() {
   const stopSong = () => sendPlayback({ ...playback, status: 'stopped', anchorElapsed: 0, anchorEpoch: Date.now() });
   const seekTo = (sec) => sendPlayback({ ...playback, anchorElapsed: Math.max(0, sec), anchorEpoch: Date.now() });
   const nudge = (delta) => seekTo(computeElapsed(playback) + delta);
+  const playFromLine = (sec) => {
+    sendPlayback({
+      ...playback,
+      status: 'playing',
+      anchorElapsed: Math.max(0, sec),
+      anchorEpoch: Date.now(),
+    });
+  };
 
   return (
     <>
@@ -2649,16 +2830,15 @@ export default function App() {
             playersCount={Object.keys(players).length}
           />
           {view === 'editor' ? (
-            <EditorView songs={songs} onChangeSongs={sendSongs} onBack={() => setView('control')} />
+            <EditorView songs={songs} onChangeSongs={sendSongs} />
           ) : view === 'options' ? (
-            <OptionsView playback={playback} onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })} onBack={() => setView('control')} />
+            <OptionsView playback={playback} onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })} />
           ) : view === 'players' ? (
             <PlayersView
               players={players}
               localPlayerId={playerId}
               onSetPlayerRole={sendPlayerRole}
               onDeletePlayer={sendDeletePlayer}
-              onBack={() => setView('control')}
             />
           ) : (
             <ControlView
@@ -2668,7 +2848,8 @@ export default function App() {
               onLoad={loadSong}
               onTogglePlay={togglePlay}
               onStop={stopSong}
-              onSeek={seekTo}
+              onSeek={playFromLine}
+              onPlayFromLine={playFromLine}
               onNudge={nudge}
             />
           )}
