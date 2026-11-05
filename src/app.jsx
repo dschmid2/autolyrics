@@ -2199,13 +2199,13 @@ function SongEditor({ song, onChange, onDelete }) {
       const prevMode = prevLine.mode || defaultMode;
       if (prevMode === 'bar_beat') {
         const prevBar = prevLine.bar !== undefined && prevLine.bar !== null && prevLine.bar !== '' ? Number(prevLine.bar) : 1;
-        newTimingProps = { bar: prevBar + 1, beat: 1 };
+        newTimingProps = { bar: prevBar, beat: 1 };
       } else if (prevMode === 'sec') {
         const prevSec = prevLine.timeSec !== undefined && prevLine.timeSec !== null ? Number(prevLine.timeSec) : 0;
         newTimingProps = { timeSec: Math.round((prevSec + 2) * 10) / 10 };
       } else if (prevMode === 'beat') {
         const prevBeat = prevLine.beat !== undefined && prevLine.beat !== null ? Number(prevLine.beat) : 1;
-        newTimingProps = { beat: prevBeat + (song.timeSigNum || 4) };
+        newTimingProps = { beat: prevBeat };
       } else if (prevMode === 'relative') {
         newTimingProps = { relativeSec: 2 };
       } else if (prevMode === 'relative_bar_beat') {
@@ -2216,24 +2216,14 @@ function SongEditor({ song, onChange, onDelete }) {
       const firstLine = lines[0];
       const firstMode = firstLine.mode || defaultMode;
       if (firstMode === 'bar_beat') {
-        newTimingProps = { bar: 1, beat: 1 };
+        const firstBar = firstLine.bar !== undefined && firstLine.bar !== null && firstLine.bar !== '' ? Number(firstLine.bar) : 1;
+        newTimingProps = { bar: firstBar, beat: 1 };
       }
     }
 
     const newLine = { id: uid(), en: '', de: '', mode: defaultMode, duration: '', ...newTimingProps };
     const insertIdx = index + 1; // insert after index
     lines.splice(insertIdx, 0, newLine);
-
-    // If inserted line has bar_beat, shift subsequent bar_beat lines if their bar is <= newLine.bar
-    if (defaultMode === 'bar_beat' && newLine.bar !== undefined) {
-      for (let i = insertIdx + 1; i < lines.length; i++) {
-        const lMode = lines[i].mode || defaultMode;
-        if (lMode === 'bar_beat') {
-          const curBar = lines[i].bar !== undefined && lines[i].bar !== null && lines[i].bar !== '' ? Number(lines[i].bar) : 1;
-          lines[i] = { ...lines[i], bar: curBar + 1 };
-        }
-      }
-    }
 
     update({ lines });
   };
