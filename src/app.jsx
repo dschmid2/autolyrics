@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Users, Sliders, MonitorPlay, Tv, Eye } from 'lucide-react';
+import { Play, Pause, Square, SkipBack, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Users, Sliders, MonitorPlay, Tv, Eye } from 'lucide-react';
 import versionData from './version.json';
 
 const COLORS = {
@@ -87,6 +87,15 @@ function getOrCreatePlayerId() {
   }
 }
 
+function getBarBeat(time, bpm = 90, timeSigNum = 4) {
+  const safeBpm = Number(bpm) || 90;
+  const safeTimeSig = Number(timeSigNum) || 4;
+  const beats = Math.max(0, time * (safeBpm / 60));
+  const bar = Math.floor(beats / safeTimeSig + 1e-4) + 1;
+  const beat = Math.floor((beats + 1e-4) % safeTimeSig) + 1;
+  return { bar, beat };
+}
+
 function computeLinesWithTimes(song) {
   if (!song || !Array.isArray(song.lines)) return [];
   const bpm = Number(song.bpm) || 90;
@@ -99,6 +108,9 @@ function computeLinesWithTimes(song) {
     const l = song.lines[i];
     const mode = l.mode || defaultMode;
     let t = 0;
+    let bar = l.bar !== undefined && l.bar !== null ? Number(l.bar) : undefined;
+    let beat = l.beat !== undefined && l.beat !== null ? Number(l.beat) : undefined;
+
     if (mode === 'sec') {
       t = Number(l.timeSec) || 0;
     } else if (mode === 'relative') {
@@ -110,19 +122,25 @@ function computeLinesWithTimes(song) {
       const totalBeats = relBar * timeSigNum + relBeat;
       t = prevTime + totalBeats * (60 / bpm);
     } else if (mode === 'bar_beat') {
-      const bar = Number(l.bar) || 1;
-      const beat = Number(l.beat) || 1;
+      bar = Number(l.bar) || 1;
+      beat = Number(l.beat) || 1;
       const totalBeats = (bar - 1) * timeSigNum + (beat - 1);
       t = Math.max(0, totalBeats * (60 / bpm));
     } else if (mode === 'beat') {
-      const beat = Number(l.beat) || 1;
+      beat = Number(l.beat) || 1;
       t = Math.max(0, (beat - 1) * 60 / bpm);
     } else {
       t = Number(l.timeSec) || 0;
     }
 
+    if (bar === undefined || beat === undefined || mode !== 'bar_beat') {
+      const bb = getBarBeat(t, bpm, timeSigNum);
+      bar = bb.bar;
+      beat = bb.beat;
+    }
+
     const duration = l.duration !== undefined && l.duration !== null && l.duration !== '' ? Number(l.duration) : null;
-    lines.push({ ...l, mode, t, duration });
+    lines.push({ ...l, mode, t, duration, bar, beat });
     prevTime = t;
   }
 
@@ -1751,12 +1769,17 @@ function ControlView({
   onStop,
   onSeek,
   onNudge,
+  onPlayFromLine,
 }) {
   const song = songs.find((s) => s.id === playback.songId) || null;
   const lines = song ? sortedLines(song) : [];
   const idx = song ? currentIndex(lines, elapsed) : -1;
   const duration = getSongDuration(lines);
+  const { bar: currentBar, beat: currentBeat } = song
+    ? getBarBeat(elapsed, song.bpm, song.timeSigNum)
+    : { bar: 1, beat: 1 };
 
+  const handleLineClick = onPlayFromLine || onSeek;
   const activeLineRef = useRef(null);
 
   // Auto-scroll active lyric line into view if it changes
@@ -1795,16 +1818,29 @@ function ControlView({
             </div>
 
             {/* Main Playback Buttons */}
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap justify-center">
+            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap justify-center">
               <button
                 onClick={() => onNudge(-5)}
                 disabled={!song}
                 aria-label="5 Sekunden zurück"
-                className="p-2.5 sm:p-3 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none"
+                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
                 style={{ background: '#fff' }}
-                title="5 Sekunden zurück"
+                title="5 Sekunden zurück (Schnellvorlauf)"
               >
-                <SkipBack size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
+                <Rewind size={16} className="sm:w-4 sm:h-4" color={COLORS.ink} />
+                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>-5s</span>
+              </button>
+
+              <button
+                onClick={() => onNudge(-1)}
+                disabled={!song}
+                aria-label="1 Sekunde zurück"
+                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
+                style={{ background: '#fff' }}
+                title="1 Sekunde zurück"
+              >
+                <ChevronLeft size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
+                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>-1s</span>
               </button>
 
               <button
@@ -1823,14 +1859,27 @@ function ControlView({
               </button>
 
               <button
+                onClick={() => onNudge(1)}
+                disabled={!song}
+                aria-label="1 Sekunde vor"
+                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
+                style={{ background: '#fff' }}
+                title="1 Sekunde vor"
+              >
+                <ChevronRight size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
+                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>+1s</span>
+              </button>
+
+              <button
                 onClick={() => onNudge(5)}
                 disabled={!song}
                 aria-label="5 Sekunden vor"
-                className="p-2.5 sm:p-3 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none"
+                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
                 style={{ background: '#fff' }}
-                title="5 Sekunden vor"
+                title="5 Sekunden vor (Schnellvorlauf)"
               >
-                <SkipForward size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
+                <FastForward size={16} className="sm:w-4 sm:h-4" color={COLORS.ink} />
+                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>+5s</span>
               </button>
 
               <button
@@ -1865,20 +1914,23 @@ function ControlView({
               )}
             </div>
 
-            {/* Elapsed / Duration Time pill */}
-            <div className="font-mono text-xs sm:text-sm px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl shrink-0 font-bold bg-white/70 shadow-sm" style={{ color: COLORS.ink }}>
-              {fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}
-            </div>
           </div>
 
           {/* Current Live Line Preview Banner */}
           {song && (
             <div className="rounded-xl p-4 shadow-inner" style={{ background: COLORS.ink }}>
-              <div className="flex items-center justify-between text-xs mb-1.5" style={{ color: COLORS.line }}>
-                <span className="uppercase tracking-wider font-semibold opacity-70">
+              <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                <span className="text-xs uppercase tracking-wider font-semibold opacity-70" style={{ color: COLORS.line }}>
                   {playback.status === 'playing' ? 'Aktuelle Zeile (Live)' : 'Status'}
                 </span>
-                <span>{fmtTime(elapsed)} / {fmtTime(duration)}</span>
+                <div
+                  className="font-mono text-sm sm:text-base font-bold px-3 py-1 rounded-lg shadow-sm flex items-center gap-2"
+                  style={{ background: COLORS.panelBg, color: COLORS.ink }}
+                >
+                  <span>{fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}</span>
+                  <span className="opacity-30">·</span>
+                  <span>Takt {currentBar}/{currentBeat}</span>
+                </div>
               </div>
               <div className="text-lg sm:text-xl font-bold min-h-[1.75rem]" style={{ color: COLORS.stageText }}>
                 {idx >= 0 ? lines[idx].en : (playback.status === 'playing' ? '…' : '— Schwarz —')}
@@ -1937,7 +1989,7 @@ function ControlView({
           <div className="flex-1 min-w-0 w-full space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs uppercase tracking-wider font-bold" style={{ color: COLORS.inkDim }}>
-                Songzeilen {lines.length > 0 ? `(${lines.length}) – Klick springt zur Zeile` : ''}
+                Songzeilen {lines.length > 0 ? `(${lines.length}) – Klick startet ab dieser Zeile` : ''}
               </span>
               {song && (
                 <span className="text-xs" style={{ color: COLORS.inkDim }}>
@@ -1965,7 +2017,7 @@ function ControlView({
                     <button
                       key={l.id}
                       ref={isActive ? activeLineRef : null}
-                      onClick={() => onSeek(l.t)}
+                      onClick={() => handleLineClick(l.t)}
                       className={`w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all ${
                         isActive
                           ? 'shadow-md scale-[1.01]'
@@ -2002,6 +2054,13 @@ function ControlView({
                           </div>
                         )}
                       </div>
+
+                      <span
+                        className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70 bg-black/5 whitespace-nowrap self-start"
+                        title={`Takt ${l.bar}/${l.beat}`}
+                      >
+                        Takt {l.bar}/{l.beat}
+                      </span>
                     </button>
                   );
                 })}
@@ -2667,6 +2726,14 @@ export default function App() {
   const stopSong = () => sendPlayback({ ...playback, status: 'stopped', anchorElapsed: 0, anchorEpoch: Date.now() });
   const seekTo = (sec) => sendPlayback({ ...playback, anchorElapsed: Math.max(0, sec), anchorEpoch: Date.now() });
   const nudge = (delta) => seekTo(computeElapsed(playback) + delta);
+  const playFromLine = (sec) => {
+    sendPlayback({
+      ...playback,
+      status: 'playing',
+      anchorElapsed: Math.max(0, sec),
+      anchorEpoch: Date.now(),
+    });
+  };
 
   return (
     <>
@@ -2717,7 +2784,8 @@ export default function App() {
               onLoad={loadSong}
               onTogglePlay={togglePlay}
               onStop={stopSong}
-              onSeek={seekTo}
+              onSeek={playFromLine}
+              onPlayFromLine={playFromLine}
               onNudge={nudge}
             />
           )}
