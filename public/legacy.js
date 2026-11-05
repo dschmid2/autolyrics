@@ -324,7 +324,7 @@
 
     var linesHtml = '';
     if (lines.length === 0) {
-      linesHtml = '<div style="color: ' + COLORS.stageTextDim + '; font-family: Georgia, serif; font-size: ' + (stageFontSize * 0.75) + 'px; text-align: center; opacity: 0.4;">— Kein Song geladen —</div>';
+      linesHtml = '<div style="color: ' + COLORS.stageTextDim + '; font-family: Gelasio, Georgia, serif; font-size: ' + (stageFontSize * 0.75) + 'px; text-align: center; opacity: 0.4;">— Kein Song geladen —</div>';
     } else {
       for (var i = 0; i < lines.length; i++) {
         var l = lines[i];
@@ -337,7 +337,7 @@
         if (commentPercent === 0) {
           linesHtml += [
             '<div style="min-height: ' + lineRowHeight + 'px; width: 100%; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center; padding: 8px 0; opacity: ' + opacity + '; pointer-events: ' + pointerEvents + '; -webkit-transition: opacity 0.5s ease-out; transition: opacity 0.5s ease-out; box-sizing: border-box;">',
-            '  <div style="color: ' + (isCurrent ? COLORS.stageText : COLORS.stageTextDim) + '; font-family: Georgia, serif; font-size: ' + stageFontSize + 'px; line-height: 1.2; text-align: left; font-weight: bold; width: 100%; word-break: break-word;">',
+            '  <div style="color: ' + (isCurrent ? COLORS.stageText : COLORS.stageTextDim) + '; font-family: Gelasio, Georgia, serif; font-size: ' + stageFontSize + 'px; line-height: 1.2; text-align: left; font-weight: bold; width: 100%; word-break: break-word;">',
             escapeHtml(l.en),
             '  </div>',
             '</div>'
@@ -352,7 +352,7 @@
             '  <div style="width: ' + commentPercent + '%; text-align: right; font-family: ui-sans-serif, system-ui, sans-serif; font-size: ' + (stageFontSize * 0.5) + 'px; line-height: 1.2; color: ' + commentColor + '; font-weight: ' + commentWeight + '; padding-right: 20px; box-sizing: border-box; word-break: break-word; -webkit-flex-shrink: 0; flex-shrink: 0;">',
             escapeHtml(l.comment || ''),
             '  </div>',
-            '  <div style="width: ' + (100 - commentPercent) + '%; text-align: left; font-family: Georgia, serif; font-size: ' + stageFontSize + 'px; line-height: 1.2; color: ' + textColor + '; font-weight: bold; padding-left: 20px; box-sizing: border-box; word-break: break-word;">',
+            '  <div style="width: ' + (100 - commentPercent) + '%; text-align: left; font-family: Gelasio, Georgia, serif; font-size: ' + stageFontSize + 'px; line-height: 1.2; color: ' + textColor + '; font-weight: bold; padding-left: 20px; box-sizing: border-box; word-break: break-word;">',
             escapeHtml(l.en),
             '  </div>',
             '</div>'
@@ -423,7 +423,7 @@
 
       contentHtml = [
         '<div style="position: absolute; left: ' + positionX + '%; top: ' + positionY + '%; -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%); width: ' + liveWidthPercent + '%; text-align: ' + textAlignCss + '; pointer-events: none; box-sizing: border-box;">',
-        '  <div style="color: ' + COLORS.stageText + '; font-family: Georgia, serif; font-size: ' + fontSize + 'px; font-weight: bold; line-height: 1.2; width: 100%; word-break: break-word;">' + escapeHtml(line.en) + '</div>',
+        '  <div style="color: ' + COLORS.stageText + '; font-family: Gelasio, Georgia, serif; font-size: ' + fontSize + 'px; font-weight: bold; line-height: 1.2; width: 100%; word-break: break-word;">' + escapeHtml(line.en) + '</div>',
         deHtml,
         '</div>'
       ].join('\n');

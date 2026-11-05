@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, Square, SkipBack, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Users, Sliders, MonitorPlay, Tv, Eye } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Users, Sliders, MonitorPlay, Tv, Eye } from 'lucide-react';
 import versionData from './version.json';
 
 const COLORS = {
@@ -951,6 +951,53 @@ function useElapsed(playback) {
   return elapsed;
 }
 
+function useLineIndex(lines, playback, leadSeconds = 0) {
+  const getIndex = () => {
+    if (!lines || !lines.length) return -1;
+    const el = computeElapsed(playback) + leadSeconds;
+    return currentIndex(lines, el);
+  };
+
+  const [idx, setIdx] = useState(getIndex);
+
+  useEffect(() => {
+    setIdx(getIndex());
+    if (playback.status !== 'playing' || !lines || !lines.length) return;
+
+    const iv = setInterval(() => {
+      const nextIdx = getIndex();
+      setIdx((prev) => (prev !== nextIdx ? nextIdx : prev));
+    }, 100);
+    return () => clearInterval(iv);
+  }, [playback, lines, leadSeconds]);
+
+  return idx;
+}
+
+function useSongCompleted(lines, playback) {
+  const checkCompleted = () => {
+    if (!lines || !lines.length) return false;
+    const dur = getSongDuration(lines);
+    return computeElapsed(playback) >= dur;
+  };
+
+  const [completed, setCompleted] = useState(checkCompleted);
+
+  useEffect(() => {
+    setCompleted(checkCompleted());
+    if (playback.status !== 'playing' || !lines || !lines.length) return;
+
+    const iv = setInterval(() => {
+      const nextCompleted = checkCompleted();
+      setCompleted((prev) => (prev !== nextCompleted ? nextCompleted : prev));
+    }, 200);
+    return () => clearInterval(iv);
+  }, [playback, lines]);
+
+  return completed;
+}
+
+
 // --- Views ------------------------------------------------------------------
 
 function OptionsView({ playback, onChangePlayback }) {
@@ -1277,15 +1324,15 @@ function ConnectionBadge({ connected }) {
   );
 }
 
-function StageView({ songs, playback, elapsed, onExit }) {
-  const song = songs.find((s) => s.id === playback.songId) || null;
-  const lines = song ? sortedLines(song) : [];
+function StageView({ songs, playback, onExit }) {
+  const song = useMemo(() => songs.find((s) => s.id === playback.songId) || null, [songs, playback.songId]);
+  const lines = useMemo(() => (song ? sortedLines(song) : []), [song]);
   const stageLeadSeconds = playback.stageLeadSeconds !== undefined ? playback.stageLeadSeconds : 0;
   const stagePastLines = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
   const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
   const stageLineSpacing = playback.stageLineSpacing !== undefined ? playback.stageLineSpacing : 24;
   const stagePositionY = playback.stagePositionY !== undefined ? playback.stagePositionY : 0;
-  const idx = song ? currentIndex(lines, elapsed + stageLeadSeconds) : -1;
+  const idx = useLineIndex(lines, playback, stageLeadSeconds);
   const currentIdx = idx >= 0 ? idx : 0;
 
   const stageFontSize = playback.stageFontSize !== undefined ? playback.stageFontSize : 64;
@@ -1305,6 +1352,9 @@ function StageView({ songs, playback, elapsed, onExit }) {
 
   const lineRowHeight = Math.max(20, Math.round(stageFontSize * 1.2 + stageLineSpacing));
 
+  const startIndex = Math.max(0, currentIdx - stagePastLines - 1);
+  const endIndex = Math.min(lines.length - 1, currentIdx + stageFutureLines + 1);
+
   // Dynamically compute the vertical center of the active line row so wrapped lines push subsequent lines down
   useEffect(() => {
     const updateOffset = () => {
@@ -1321,7 +1371,12 @@ function StageView({ songs, playback, elapsed, onExit }) {
     updateOffset();
     window.addEventListener('resize', updateOffset);
     return () => window.removeEventListener('resize', updateOffset);
-  }, [currentIdx, lines, stageFontSize, commentPercent, lineRowHeight]);
+  }, [currentIdx, lines, stageFontSize, commentPercent, lineRowHeight, startIndex, endIndex]);
+
+  const topSpacerHeight = startIndex > 0 ? startIndex * lineRowHeight : 0;
+  const bottomSpacerHeight = lines.length > 0 && endIndex < lines.length - 1
+    ? (lines.length - 1 - endIndex) * lineRowHeight
+    : 0;
 
   return (
     <div
@@ -1350,7 +1405,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
             <div
               style={{
                 color: COLORS.stageTextDim,
-                fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
+                fontFamily: 'Gelasio, Georgia, "Iowan Old Style", ui-serif, serif',
                 fontSize: `${stageFontSize * 0.75}px`
               }}
               className="text-center opacity-40"
@@ -1358,31 +1413,81 @@ function StageView({ songs, playback, elapsed, onExit }) {
               — Kein Song geladen —
             </div>
           ) : (
-            lines.map((l, i) => {
-              const isCurrent = i === currentIdx;
-              const isPast = i < currentIdx;
-              const isVisible = i >= currentIdx - stagePastLines && i <= currentIdx + stageFutureLines;
+            <>
+              {topSpacerHeight > 0 && (
+                <div style={{ height: `${topSpacerHeight}px` }} className="w-full shrink-0" aria-hidden="true" />
+              )}
+              {lines.slice(startIndex, endIndex + 1).map((l, sliceIdx) => {
+                const i = startIndex + sliceIdx;
+                const isCurrent = i === currentIdx;
+                const isPast = i < currentIdx;
+                const isVisible = i >= currentIdx - stagePastLines && i <= currentIdx + stageFutureLines;
 
-              if (commentPercent === 0) {
+                if (commentPercent === 0) {
+                  return (
+                    <div
+                      key={l.id}
+                      ref={(el) => { lineRefs.current[i] = el; }}
+                      style={{
+                        minHeight: `${lineRowHeight}px`
+                      }}
+                      className={`flex items-center w-full justify-start shrink-0 py-2 transition-opacity duration-500 ${
+                        !isVisible ? 'opacity-0 pointer-events-none' : ''
+                      }`}
+                    >
+                      <div
+                        style={{
+                          color: isCurrent ? COLORS.stageText : COLORS.stageTextDim,
+                          fontFamily: 'Gelasio, Georgia, "Iowan Old Style", ui-serif, serif',
+                          fontSize: `${stageFontSize}px`,
+                          lineHeight: '1.2'
+                        }}
+                        className={`text-left font-bold transition-opacity duration-500 ${
+                          !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100' : isPast ? 'opacity-25' : 'opacity-40'
+                        }`}
+                      >
+                        {l.en}
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     key={l.id}
                     ref={(el) => { lineRefs.current[i] = el; }}
                     style={{
-                      minHeight: `${lineRowHeight}px`
+                      minHeight: `${lineRowHeight}px`,
+                      gridTemplateColumns: `${commentPercent}% 1fr`
                     }}
-                    className={`flex items-center w-full justify-start shrink-0 py-2 transition-opacity duration-500 ${
+                    className={`grid items-center w-full shrink-0 py-2 transition-opacity duration-500 ${
                       !isVisible ? 'opacity-0 pointer-events-none' : ''
                     }`}
                   >
+                    {/* Left Column: Comment (Right-aligned, wraps without truncation, uniform bold font weight) */}
+                    <div
+                      style={{
+                        color: isCurrent ? COLORS.amber : COLORS.stageTextDim,
+                        fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+                        fontSize: `${stageFontSize * 0.5}px`,
+                        lineHeight: '1.2'
+                      }}
+                      className={`text-right font-bold pr-4 md:pr-6 break-words min-w-0 transition-opacity duration-500 ${
+                        !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100' : isPast ? 'opacity-25' : 'opacity-40'
+                      }`}
+                    >
+                      {l.comment || ''}
+                    </div>
+
+                    {/* Right Column: Lyrics (Left-aligned, always bold) */}
                     <div
                       style={{
                         color: isCurrent ? COLORS.stageText : COLORS.stageTextDim,
-                        fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
+                        fontFamily: 'Gelasio, Georgia, "Iowan Old Style", ui-serif, serif',
                         fontSize: `${stageFontSize}px`,
                         lineHeight: '1.2'
                       }}
-                      className={`text-left font-bold transition-all duration-500 ${
+                      className={`text-left pl-4 md:pl-6 font-bold transition-opacity duration-500 ${
                         !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100' : isPast ? 'opacity-25' : 'opacity-40'
                       }`}
                     >
@@ -1390,52 +1495,11 @@ function StageView({ songs, playback, elapsed, onExit }) {
                     </div>
                   </div>
                 );
-              }
-
-              return (
-                <div
-                  key={l.id}
-                  ref={(el) => { lineRefs.current[i] = el; }}
-                  style={{
-                    minHeight: `${lineRowHeight}px`,
-                    gridTemplateColumns: `${commentPercent}% 1fr`
-                  }}
-                  className={`grid items-center w-full shrink-0 py-2 transition-opacity duration-500 ${
-                    !isVisible ? 'opacity-0 pointer-events-none' : ''
-                  }`}
-                >
-                  {/* Left Column: Comment (Right-aligned, wraps without truncation) */}
-                  <div
-                    style={{
-                      color: isCurrent ? COLORS.amber : COLORS.stageTextDim,
-                      fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-                      fontSize: `${stageFontSize * 0.5}px`,
-                      lineHeight: '1.2'
-                    }}
-                    className={`text-right font-medium pr-4 md:pr-6 break-words min-w-0 transition-opacity duration-500 ${
-                      !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100 font-bold' : isPast ? 'opacity-25' : 'opacity-40'
-                    }`}
-                  >
-                    {l.comment || ''}
-                  </div>
-
-                  {/* Right Column: Lyrics (Left-aligned, always bold) */}
-                  <div
-                    style={{
-                      color: isCurrent ? COLORS.stageText : COLORS.stageTextDim,
-                      fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
-                      fontSize: `${stageFontSize}px`,
-                      lineHeight: '1.2'
-                    }}
-                    className={`text-left pl-4 md:pl-6 font-bold transition-all duration-500 ${
-                      !isVisible ? 'opacity-0' : isCurrent ? 'opacity-100' : isPast ? 'opacity-25' : 'opacity-40'
-                    }`}
-                  >
-                    {l.en}
-                  </div>
-                </div>
-              );
-            })
+              })}
+              {bottomSpacerHeight > 0 && (
+                <div style={{ height: `${bottomSpacerHeight}px` }} className="w-full shrink-0" aria-hidden="true" />
+              )}
+            </>
           )}
         </div>
       </div>
@@ -1467,7 +1531,7 @@ function StageView({ songs, playback, elapsed, onExit }) {
   );
 }
 
-function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
+function ProjectionView({ songs, playback, onExit, connected }) {
   const [blackout, setBlackout] = useState(false);
 
   useEffect(() => {
@@ -1484,12 +1548,12 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
     return () => clearTimeout(timer);
   }, [connected]);
 
-  const song = songs.find((s) => s.id === playback.songId) || null;
+  const song = useMemo(() => songs.find((s) => s.id === playback.songId) || null, [songs, playback.songId]);
+  const lines = useMemo(() => (song ? sortedLines(song) : []), [song]);
+  const isSongCompleted = useSongCompleted(lines, playback);
   const showText = !blackout && playback.status === 'playing' && song;
-  const lines = song ? sortedLines(song) : [];
-  const duration = getSongDuration(lines);
-  const isSongCompleted = song && elapsed >= duration;
-  const idx = showText ? currentIndex(lines, elapsed) : -1;
+  const activeLineIdx = useLineIndex(lines, playback, 0);
+  const idx = showText ? activeLineIdx : -1;
   const activeLine = idx >= 0 ? lines[idx] : null;
   const line = (activeLine && !activeLine.stageOnly) ? activeLine : null;
   const pulseDuration = song ? 60 / (song.bpm || 60) : 1;
@@ -1532,7 +1596,7 @@ function ProjectionView({ songs, playback, elapsed, onExit, connected }) {
           <div
             style={{
               color: COLORS.stageText,
-              fontFamily: 'Georgia, "Iowan Old Style", ui-serif, serif',
+              fontFamily: 'Gelasio, Georgia, "Iowan Old Style", ui-serif, serif',
               fontSize: `${fontSize}px`,
               width: '100%',
             }}
@@ -1771,8 +1835,8 @@ function ControlView({
   onNudge,
   onPlayFromLine,
 }) {
-  const song = songs.find((s) => s.id === playback.songId) || null;
-  const lines = song ? sortedLines(song) : [];
+  const song = useMemo(() => songs.find((s) => s.id === playback.songId) || null, [songs, playback.songId]);
+  const lines = useMemo(() => (song ? sortedLines(song) : []), [song]);
   const idx = song ? currentIndex(lines, elapsed) : -1;
   const duration = getSongDuration(lines);
   const { bar: currentBar, beat: currentBeat } = song
@@ -2746,16 +2810,16 @@ export default function App() {
       `}</style>
       {view === 'player' ? (
         localPlayer && localPlayer.role === 'live' ? (
-          <ProjectionView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} connected={connected} />
+          <ProjectionView songs={songs} playback={playback} onExit={() => changeView('control')} connected={connected} />
         ) : localPlayer && localPlayer.role === 'stage' ? (
-          <StageView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} />
+          <StageView songs={songs} playback={playback} onExit={() => changeView('control')} />
         ) : (
           <UnassignedPlayerView playerId={playerId} />
         )
       ) : view === 'projection' ? (
-        <ProjectionView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} connected={connected} />
+        <ProjectionView songs={songs} playback={playback} onExit={() => changeView('control')} connected={connected} />
       ) : view === 'stage' ? (
-        <StageView songs={songs} playback={playback} elapsed={elapsed} onExit={() => changeView('control')} />
+        <StageView songs={songs} playback={playback} onExit={() => changeView('control')} />
       ) : (
         <div className="min-h-screen" style={{ background: COLORS.panelBg }}>
           <TopMenuBar
