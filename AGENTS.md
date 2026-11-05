@@ -30,9 +30,9 @@ Autolyrics is a lightweight, real-time web application for synchronized song lyr
   3. `npm run build:js` -> bundles React code into `public/bundle.js`
 
 ### Versioning Mechanism
-* App versioning is formatted as `1.0.<commit_count>`.
-* `scripts/generate-version.js` generates `src/version.json` using `git rev-list --count HEAD`.
-* In CI/CD (GitHub Actions), ensure `fetch-depth: 0` is set during checkout so commit counts are computed accurately.
+* App versioning is formatted as `1.0.<build_number>`.
+* `scripts/generate-version.js` generates `src/version.json` based on the CI/CD pipeline run (`GITHUB_RUN_NUMBER`) or the git merge request/pull request count, incrementing for pending merge requests.
+* In CI/CD (GitHub Actions), the workflow passes `GITHUB_RUN_NUMBER` into the build process and sets `fetch-depth: 0` during checkout.
 
 ---
 

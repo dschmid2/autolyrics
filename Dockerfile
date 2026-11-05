@@ -4,6 +4,8 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
+ARG GITHUB_RUN_NUMBER
+ENV GITHUB_RUN_NUMBER=${GITHUB_RUN_NUMBER}
 RUN npm run build
 
 # --- Laufzeit-Stufe: nur das, was der Server zur Laufzeit braucht ----------

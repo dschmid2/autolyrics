@@ -83,7 +83,7 @@ autolyrics/
 │   ├── index.html         # HTML-Einstiegspunkt
 │   └── styles.css         # Gebündeltes Tailwind CSS
 ├── scripts/
-│   └── generate-version.js # Generiert src/version.json anhand der Git-Commits
+│   └── generate-version.js # Generiert src/version.json anhand der Pipeline-Runs / Merge-Requests
 ├── server/
 │   └── index.js           # Express- und WebSocket-Server
 ├── src/

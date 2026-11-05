@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Users, Sliders, MonitorPlay, Tv, Eye } from 'lucide-react';
+import { Play, Pause, Square, SkipBack, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Users, Sliders, MonitorPlay, Tv, Eye } from 'lucide-react';
 import versionData from './version.json';
 
 const COLORS = {
@@ -1764,7 +1764,7 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
         <div className="flex items-center gap-2 sm:gap-6 overflow-x-auto py-1 min-w-0 no-scrollbar">
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <span className="font-bold text-sm sm:text-base tracking-tight" style={{ color: COLORS.ink }}>Autolyrics</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded hidden sm:inline" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded inline-block" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
               v{versionData.version}
             </span>
           </div>
