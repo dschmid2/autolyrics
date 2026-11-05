@@ -1914,29 +1914,23 @@ function ControlView({
               )}
             </div>
 
-            {/* Elapsed / Duration & Bar / Beat Time pill */}
-            <div className="font-mono text-xs sm:text-sm px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl shrink-0 font-bold bg-white/70 shadow-sm flex items-center gap-2" style={{ color: COLORS.ink }}>
-              <span>{fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}</span>
-              {song && (
-                <>
-                  <span className="opacity-30">|</span>
-                  <span className="text-xs sm:text-sm font-semibold">Takt {currentBar}, Schlag {currentBeat}</span>
-                </>
-              )}
-            </div>
           </div>
 
           {/* Current Live Line Preview Banner */}
           {song && (
             <div className="rounded-xl p-4 shadow-inner" style={{ background: COLORS.ink }}>
-              <div className="flex items-center justify-between text-xs mb-1.5" style={{ color: COLORS.line }}>
-                <span className="uppercase tracking-wider font-semibold opacity-70">
+              <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                <span className="text-xs uppercase tracking-wider font-semibold opacity-70" style={{ color: COLORS.line }}>
                   {playback.status === 'playing' ? 'Aktuelle Zeile (Live)' : 'Status'}
                 </span>
-                <span>
-                  {fmtTime(elapsed)} / {fmtTime(duration)}
-                  {song && ` · Takt ${currentBar}, Schlag ${currentBeat}`}
-                </span>
+                <div
+                  className="font-mono text-sm sm:text-base font-bold px-3 py-1 rounded-lg shadow-sm flex items-center gap-2"
+                  style={{ background: COLORS.panelBg, color: COLORS.ink }}
+                >
+                  <span>{fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}</span>
+                  <span className="opacity-30">·</span>
+                  <span>Takt {currentBar}/{currentBeat}</span>
+                </div>
               </div>
               <div className="text-lg sm:text-xl font-bold min-h-[1.75rem]" style={{ color: COLORS.stageText }}>
                 {idx >= 0 ? lines[idx].en : (playback.status === 'playing' ? '…' : '— Schwarz —')}
@@ -2063,9 +2057,9 @@ function ControlView({
 
                       <span
                         className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70 bg-black/5 whitespace-nowrap self-start"
-                        title={`Takt ${l.bar}, Schlag ${l.beat}`}
+                        title={`Takt ${l.bar}/${l.beat}`}
                       >
-                        Takt {l.bar}, Schlag {l.beat}
+                        Takt {l.bar}/{l.beat}
                       </span>
                     </button>
                   );
