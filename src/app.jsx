@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Users, Sliders, MonitorPlay, Tv, Eye } from 'lucide-react';
+import { Play, Pause, Square, SkipBack, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Trash2, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Users, Sliders, MonitorPlay, Tv, Eye, QrCode } from 'lucide-react';
 import versionData from './version.json';
 
 const COLORS = {
