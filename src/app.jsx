@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Play, Pause, Square, SkipBack, SkipForward, Plus, Trash2, ChevronUp, ChevronDown, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Users, Sliders, MonitorPlay, Tv, Eye } from 'lucide-react';
+import { Play, Pause, Square, SkipBack, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Trash2, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Tablet, Sliders, MonitorPlay, Tv, Eye, QrCode } from 'lucide-react';
 import versionData from './version.json';
 
 const COLORS = {
@@ -1753,7 +1753,7 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
   const navItems = [
     { id: 'control', label: 'Steuerung', icon: MonitorPlay },
     { id: 'editor', label: 'Song-Editor', icon: Music },
-    { id: 'players', label: `Player-Verwaltung${playersCount > 0 ? ` (${playersCount})` : ''}`, icon: Users },
+    { id: 'players', label: `Player-Verwaltung${playersCount > 0 ? ` (${playersCount})` : ''}`, icon: Tablet },
     { id: 'options', label: 'Einstellungen', icon: Sliders },
   ];
 
