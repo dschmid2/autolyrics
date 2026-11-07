@@ -29,6 +29,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: QEMU für ARM-Builds einrichten
+        uses: docker/setup-qemu-action@v3
+
       - name: Docker Buildx einrichten
         uses: docker/setup-buildx-action@v3
 
@@ -36,6 +39,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:latest
