@@ -361,7 +361,7 @@ function WaveformCanvas({ audioBuffer, pxPerSec, bpm, timeSigNum, duration, widt
   return <canvas ref={canvasRef} style={{ width: `${width}px`, height: `${height}px`, display: 'block' }} />;
 }
 
-function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChange, seekRef }) {
+function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChange, seekRef, playback, sendPlayback }) {
   const { audioBuffer, loading, error } = useAudioBuffer(song.audioUrl);
   const audioRef = useRef(null);
   const containerRef = useRef(null);
@@ -369,6 +369,9 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
   const [isPlaying, setIsPlaying] = useState(false);
   const isPlayingRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const currentTimeRef = useRef(0);
+  const [sendToScreens, setSendToScreens] = useState(false);
+  const sendToScreensRef = useRef(false);
   const [pxPerSec, setPxPerSec] = useState(40);
   const [isDragging, setIsDragging] = useState(false);
   const [markerDragMode, setMarkerDragMode] = useState('single');
@@ -421,6 +424,7 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
           container.scrollLeft = Math.max(0, targetScrollLeft);
         }
 
+        currentTimeRef.current = nextSongTime;
         return nextSongTime;
       });
 
@@ -437,6 +441,58 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
     return () => cancelAnimationFrame(animId);
   }, [isPlaying, audioOffset, audioBuffer, audioDuration, isDragging, pxPerSec]);
 
+  // Keep latest refs for callbacks to avoid stale closures
+  const playbackRef = useRef(playback);
+  useEffect(() => { playbackRef.current = playback; }, [playback]);
+  const songRef = useRef(song);
+  useEffect(() => { songRef.current = song; }, [song]);
+
+  const syncScreens = useCallback((status, timeSec) => {
+    if (!sendToScreensRef.current || !sendPlayback) return;
+    const elapsed = timeSec !== undefined ? timeSec : currentTimeRef.current;
+    sendPlayback({
+      ...(playbackRef.current || {}),
+      songId: songRef.current.id,
+      status,
+      anchorElapsed: Math.max(0, elapsed),
+      anchorEpoch: Date.now(),
+    });
+  }, [sendPlayback]);
+
+  useEffect(() => {
+    return () => {
+      // If sendToScreens was active when component unmounts, stop screens
+      if (sendToScreensRef.current && sendPlayback && playbackRef.current) {
+        sendPlayback({
+          ...playbackRef.current,
+          songId: songRef.current.id,
+          status: 'stopped',
+          anchorElapsed: 0,
+          anchorEpoch: Date.now(),
+        });
+      }
+    };
+  }, [sendPlayback]);
+
+  const toggleSendToScreens = () => {
+    const nextVal = !sendToScreens;
+    setSendToScreens(nextVal);
+    sendToScreensRef.current = nextVal;
+    if (sendPlayback) {
+      if (nextVal) {
+        syncScreens(isPlayingRef.current ? 'playing' : 'paused', currentTimeRef.current);
+      } else {
+        sendPlayback({
+          ...(playbackRef.current || {}),
+          songId: songRef.current.id,
+          status: 'stopped',
+          anchorElapsed: 0,
+          anchorEpoch: Date.now(),
+        });
+      }
+    }
+  };
+
   const togglePlay = () => {
     if (isPlayingRef.current) {
       isPlayingRef.current = false;
@@ -444,6 +500,7 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
       if (audioRef.current) {
         audioRef.current.pause();
       }
+      syncScreens('paused', currentTimeRef.current);
     } else {
       isPlayingRef.current = true;
       setIsPlaying(true);
@@ -452,6 +509,7 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
         audioRef.current.currentTime = targetAudioTime;
         audioRef.current.play().catch(() => {});
       }
+      syncScreens('playing', currentTimeRef.current);
     }
   };
 
@@ -460,14 +518,17 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
     setIsPlaying(false);
     if (audioRef.current) audioRef.current.pause();
     setCurrentTime(0);
+    currentTimeRef.current = 0;
     if (containerRef.current) {
       containerRef.current.scrollLeft = 0;
     }
+    syncScreens('stopped', 0);
   };
 
   const seekToTime = useCallback((timeSec) => {
     const clampedTime = Math.max(0, Math.min(totalDuration, timeSec));
     setCurrentTime(clampedTime);
+    currentTimeRef.current = clampedTime;
     const targetAudioTime = clampedTime - audioOffset;
     if (audioRef.current && audioBuffer) {
       if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
@@ -481,7 +542,8 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
       const headX = clampedTime * pxPerSec;
       container.scrollLeft = Math.max(0, headX - container.clientWidth / 2);
     }
-  }, [totalDuration, audioOffset, audioBuffer, audioDuration, pxPerSec]);
+    syncScreens(isPlayingRef.current ? 'playing' : 'paused', clampedTime);
+  }, [totalDuration, audioOffset, audioBuffer, audioDuration, pxPerSec, syncScreens]);
 
   useEffect(() => {
     if (seekRef) {
@@ -542,15 +604,7 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
     const rect = container.getBoundingClientRect();
     const x = e.clientX - rect.left + container.scrollLeft;
     const seekTime = Math.max(0, Math.min(totalDuration, x / pxPerSec));
-    setCurrentTime(seekTime);
-    const targetAudioTime = seekTime - audioOffset;
-    if (audioRef.current && audioBuffer) {
-      if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
-        audioRef.current.currentTime = targetAudioTime;
-      } else {
-        audioRef.current.pause();
-      }
-    }
+    seekToTime(seekTime);
   };
 
   const handleAudioOffsetPointerDown = (e) => {
@@ -643,6 +697,7 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
         onEnded={() => {
           isPlayingRef.current = false;
           setIsPlaying(false);
+          syncScreens('stopped', 0);
         }}
       />
 
@@ -747,6 +802,19 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
               Dieser &amp; folgende
             </button>
           </div>
+
+          <button
+            onClick={toggleSendToScreens}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors border ${
+              sendToScreens
+                ? 'bg-amber-500 text-black border-amber-400 font-semibold shadow-sm'
+                : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white hover:bg-zinc-700'
+            }`}
+            title="Texte während des MP3-Playbacks live an Stage- und Projection-Screens senden"
+          >
+            <Tv size={14} className={sendToScreens ? 'text-black' : 'text-zinc-400'} />
+            <span>Send to screens</span>
+          </button>
         </div>
 
         {/* Zoom Controls */}
@@ -2292,7 +2360,7 @@ function ImportExport({ songs, onImport }) {
   );
 }
 
-function SongEditor({ song, onChange, onDelete }) {
+function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [waveformPlayback, setWaveformPlayback] = useState({ isPlaying: false, currentTime: 0, activeIdx: -1, activeLineId: null });
@@ -2572,6 +2640,8 @@ function SongEditor({ song, onChange, onDelete }) {
             onUpdateSong={update}
             onPlaybackStateChange={setWaveformPlayback}
             seekRef={waveformSeekRef}
+            playback={playback}
+            sendPlayback={sendPlayback}
           />
         ) : (
           <div className="p-4 text-center border-2 border-dashed rounded-lg text-xs" style={{ borderColor: COLORS.line, color: COLORS.inkDim }}>
@@ -2744,7 +2814,7 @@ function SongEditor({ song, onChange, onDelete }) {
   );
 }
 
-function EditorView({ songs, onChangeSongs }) {
+function EditorView({ songs, onChangeSongs, playback, sendPlayback }) {
   const [selectedId, setSelectedId] = useState(songs[0] ? songs[0].id : null);
   const selected = songs.find((s) => s.id === selectedId) || null;
 
@@ -2816,7 +2886,17 @@ function EditorView({ songs, onChangeSongs }) {
             <button onClick={addSong} className="w-full text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}><Plus size={14} /> Neuer Song</button>
           </div>
           <div className="flex-1 min-w-0">
-            {selected ? <SongEditor song={selected} onChange={updateSong} onDelete={() => deleteSong(selected.id)} /> : <div className="text-sm" style={{ color: COLORS.inkDim }}>Song auswählen oder neu erstellen.</div>}
+            {selected ? (
+              <SongEditor
+                song={selected}
+                onChange={updateSong}
+                onDelete={() => deleteSong(selected.id)}
+                playback={playback}
+                sendPlayback={sendPlayback}
+              />
+            ) : (
+              <div className="text-sm" style={{ color: COLORS.inkDim }}>Song auswählen oder neu erstellen.</div>
+            )}
             <ImportExport songs={songs} onImport={onChangeSongs} />
           </div>
         </div>
@@ -2928,7 +3008,12 @@ export default function App() {
             playersCount={Object.keys(players).length}
           />
           {view === 'editor' ? (
-            <EditorView songs={songs} onChangeSongs={sendSongs} />
+            <EditorView
+              songs={songs}
+              onChangeSongs={sendSongs}
+              playback={playback}
+              sendPlayback={sendPlayback}
+            />
           ) : view === 'options' ? (
             <OptionsView playback={playback} onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })} />
           ) : view === 'players' ? (
