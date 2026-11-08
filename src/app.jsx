@@ -367,6 +367,7 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
   const containerRef = useRef(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const isPlayingRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [pxPerSec, setPxPerSec] = useState(40);
   const [isDragging, setIsDragging] = useState(false);
@@ -385,34 +386,45 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
   useEffect(() => {
     let animId;
     const update = () => {
+      if (!isPlayingRef.current) return;
       const now = Date.now();
       const delta = (now - lastTickRef.current) / 1000;
       lastTickRef.current = now;
 
-      if (isPlaying) {
-        setCurrentTime((prev) => {
-          const nextSongTime = Math.max(0, prev + delta);
-          const targetAudioTime = nextSongTime - audioOffset;
+      setCurrentTime((prev) => {
+        if (!isPlayingRef.current) return prev;
+        const nextSongTime = Math.max(0, prev + delta);
+        const targetAudioTime = nextSongTime - audioOffset;
 
-          if (audioRef.current && audioBuffer) {
-            if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
-              if (audioRef.current.paused) {
+        if (audioRef.current && audioBuffer) {
+          if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
+            if (audioRef.current.paused && isPlayingRef.current) {
+              audioRef.current.currentTime = targetAudioTime;
+              audioRef.current.play().catch(() => {});
+            } else if (!audioRef.current.paused) {
+              const diff = Math.abs(audioRef.current.currentTime - targetAudioTime);
+              if (diff > 0.15) {
                 audioRef.current.currentTime = targetAudioTime;
-                audioRef.current.play().catch(() => {});
-              } else {
-                const diff = Math.abs(audioRef.current.currentTime - targetAudioTime);
-                if (diff > 0.15) {
-                  audioRef.current.currentTime = targetAudioTime;
-                }
-              }
-            } else {
-              if (!audioRef.current.paused) {
-                audioRef.current.pause();
               }
             }
+          } else {
+            if (!audioRef.current.paused) {
+              audioRef.current.pause();
+            }
           }
-          return nextSongTime;
-        });
+        }
+
+        if (containerRef.current && !isDragging) {
+          const container = containerRef.current;
+          const headX = nextSongTime * pxPerSec;
+          const targetScrollLeft = headX - container.clientWidth / 2;
+          container.scrollLeft = Math.max(0, targetScrollLeft);
+        }
+
+        return nextSongTime;
+      });
+
+      if (isPlayingRef.current) {
         animId = requestAnimationFrame(update);
       }
     };
@@ -423,28 +435,34 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isPlaying, audioOffset, audioBuffer, audioDuration]);
+  }, [isPlaying, audioOffset, audioBuffer, audioDuration, isDragging, pxPerSec]);
 
   const togglePlay = () => {
-    if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
+    if (isPlayingRef.current) {
+      isPlayingRef.current = false;
       setIsPlaying(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
     } else {
+      isPlayingRef.current = true;
+      setIsPlaying(true);
       const targetAudioTime = currentTime - audioOffset;
-      if (audioBuffer && targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
+      if (audioRef.current && audioBuffer && targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
         audioRef.current.currentTime = targetAudioTime;
-        audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
-      } else {
-        setIsPlaying(true);
+        audioRef.current.play().catch(() => {});
       }
     }
   };
 
   const stopAudio = () => {
-    if (audioRef.current) audioRef.current.pause();
+    isPlayingRef.current = false;
     setIsPlaying(false);
+    if (audioRef.current) audioRef.current.pause();
     setCurrentTime(0);
+    if (containerRef.current) {
+      containerRef.current.scrollLeft = 0;
+    }
   };
 
   const seekNudge = (delta) => {
@@ -457,6 +475,11 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
       } else {
         audioRef.current.pause();
       }
+    }
+    if (containerRef.current) {
+      const container = containerRef.current;
+      const headX = newSongTime * pxPerSec;
+      container.scrollLeft = Math.max(0, headX - container.clientWidth / 2);
     }
   };
 
@@ -596,9 +619,10 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
       <audio
         ref={audioRef}
         src={song.audioUrl}
-        onEnded={() => setIsPlaying(false)}
-        onPause={() => setIsPlaying(false)}
-        onPlay={() => setIsPlaying(true)}
+        onEnded={() => {
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+        }}
       />
 
       {/* Top Banner: Preview & Live Clock */}
@@ -2508,11 +2532,11 @@ function SongEditor({ song, onChange, onDelete }) {
         )}
       </div>
 
-      {/* Lyric Line Textfields */}
+      {/* Lyric Line Textfields Header & Scroll Container */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <div className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.inkDim }}>
-            Songzeilen &amp; Marker-Zeitstempel
+            Songzeilen &amp; Marker-Zeitstempel ({song.lines.length})
           </div>
           {song.lines.length > 0 && (
             <button
@@ -2525,103 +2549,106 @@ function SongEditor({ song, onChange, onDelete }) {
             </button>
           )}
         </div>
-        {song.lines.map((l, idx) => {
-          const computedLine = computedLines.find((cl) => cl.id === l.id);
-          const t = computedLine ? computedLine.t : 0;
-          return (
-            <div key={l.id} className="rounded-lg p-2 space-y-1" style={{ background: COLORS.panelBg2 }}>
-              <div className="flex gap-2 items-center">
-                <input
-                  value={l.en}
-                  onChange={(e) => updateLine(l.id, { en: e.target.value })}
-                  placeholder="Englisch / Haupttext"
-                  className="flex-1 px-2 py-1 rounded text-sm"
-                  style={{ background: '#fff', color: COLORS.ink }}
-                />
-                <input
-                  value={l.comment || ''}
-                  onChange={(e) => updateLine(l.id, { comment: e.target.value })}
-                  placeholder="[Kommentar / Solo]"
-                  className="w-36 px-2 py-1 rounded text-xs border border-gray-200"
-                  style={{ background: '#fff', color: COLORS.ink }}
-                  title="Kommentar für Solosänger (wird im Stagedisplay links angezeigt)"
-                />
-                <label className="flex items-center gap-1 text-xs font-medium cursor-pointer whitespace-nowrap" style={{ color: COLORS.inkDim }} title="Nur im Stageview anzeigen (*), nie auf der Projektion">
+
+        <div className="max-h-[calc(100vh-28rem)] min-h-[160px] overflow-y-auto space-y-2 pr-1 rounded-xl">
+          {song.lines.map((l, idx) => {
+            const computedLine = computedLines.find((cl) => cl.id === l.id);
+            const t = computedLine ? computedLine.t : 0;
+            return (
+              <div key={l.id} className="rounded-lg p-2 space-y-1" style={{ background: COLORS.panelBg2 }}>
+                <div className="flex gap-2 items-center">
                   <input
-                    type="checkbox"
-                    checked={!!l.stageOnly}
-                    onChange={(e) => updateLine(l.id, { stageOnly: e.target.checked })}
-                    className="rounded accent-amber"
+                    value={l.en}
+                    onChange={(e) => updateLine(l.id, { en: e.target.value })}
+                    placeholder="Englisch / Haupttext"
+                    className="flex-1 px-2 py-1 rounded text-sm"
+                    style={{ background: '#fff', color: COLORS.ink }}
                   />
-                  <span>Nur Stage (*)</span>
-                </label>
-              </div>
-              <input value={l.de || ''} onChange={(e) => updateLine(l.id, { de: e.target.value })} placeholder="Deutsch (Übersetzung)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
-              <div className="flex items-center gap-2 flex-wrap text-xs">
-                <select value={l.mode || currentTimingMode} onChange={(e) => updateLine(l.id, { mode: e.target.value })} className="px-1.5 py-1 rounded bg-white text-xs border border-gray-200" style={{ color: COLORS.ink }}>
-                  <option value="bar_beat">Takt / Schlag</option>
-                  <option value="sec">Absolut (Sekunden)</option>
-                  <option value="relative">Relativ (s seit letzter)</option>
-                  <option value="beat">Schlag absolut</option>
-                  <option value="relative_bar_beat">Relativ (Takt / Schlag)</option>
-                </select>
-
-                {l.mode === 'sec' && (
-                  <div className="flex items-center gap-1">
-                    <span style={{ color: COLORS.inkDim }}>s:</span>
-                    <input type="number" step="0.1" value={l.timeSec !== undefined && l.timeSec !== null ? l.timeSec : ''} onChange={(e) => updateLine(l.id, { timeSec: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                  </div>
-                )}
-
-                {l.mode === 'relative' && (
-                  <div className="flex items-center gap-1">
-                    <span style={{ color: COLORS.inkDim }}>+s:</span>
-                    <input type="number" step="0.1" value={l.relativeSec !== undefined && l.relativeSec !== null ? l.relativeSec : ''} onChange={(e) => updateLine(l.id, { relativeSec: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                  </div>
-                )}
-
-                {l.mode === 'relative_bar_beat' && (
-                  <div className="flex items-center gap-1">
-                    <span style={{ color: COLORS.inkDim }}>+Takt:</span>
-                    <input type="number" step="1" value={l.relativeBar !== undefined && l.relativeBar !== null ? l.relativeBar : ''} onChange={(e) => updateLine(l.id, { relativeBar: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                    <span style={{ color: COLORS.inkDim }}>+Schlag:</span>
-                    <input type="number" step="1" value={l.relativeBeat !== undefined && l.relativeBeat !== null ? l.relativeBeat : ''} onChange={(e) => updateLine(l.id, { relativeBeat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                  </div>
-                )}
-
-                {(l.mode === 'bar_beat' || !l.mode) && (
-                  <div className="flex items-center gap-1">
-                    <span style={{ color: COLORS.inkDim }}>Takt:</span>
-                    <input type="number" step="1" min="1" value={l.bar !== undefined && l.bar !== null ? l.bar : 1} onChange={(e) => handleBarChange(l.id, e.target.value)} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                    <span style={{ color: COLORS.inkDim }}>Schlag:</span>
-                    <input type="number" step="1" min="1" max={song.timeSigNum || 4} value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                  </div>
-                )}
-
-                {l.mode === 'beat' && (
-                  <div className="flex items-center gap-1">
-                    <span style={{ color: COLORS.inkDim }}>Schlag:</span>
-                    <input type="number" step="1" min="1" value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                  </div>
-                )}
-
-                <div className="flex items-center gap-1">
-                  <span style={{ color: COLORS.inkDim }} title="Anzeigedauer in Sekunden">Dauer (s):</span>
-                  <input type="number" step="0.1" min="0" placeholder="∞" value={l.duration !== undefined && l.duration !== null ? l.duration : ''} onChange={(e) => updateLine(l.id, { duration: e.target.value })} className="w-14 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                  <input
+                    value={l.comment || ''}
+                    onChange={(e) => updateLine(l.id, { comment: e.target.value })}
+                    placeholder="[Kommentar / Solo]"
+                    className="w-36 px-2 py-1 rounded text-xs border border-gray-200"
+                    style={{ background: '#fff', color: COLORS.ink }}
+                    title="Kommentar für Solosänger (wird im Stagedisplay links angezeigt)"
+                  />
+                  <label className="flex items-center gap-1 text-xs font-medium cursor-pointer whitespace-nowrap" style={{ color: COLORS.inkDim }} title="Nur im Stageview anzeigen (*), nie auf der Projektion">
+                    <input
+                      type="checkbox"
+                      checked={!!l.stageOnly}
+                      onChange={(e) => updateLine(l.id, { stageOnly: e.target.checked })}
+                      className="rounded accent-amber"
+                    />
+                    <span>Nur Stage (*)</span>
+                  </label>
                 </div>
+                <input value={l.de || ''} onChange={(e) => updateLine(l.id, { de: e.target.value })} placeholder="Deutsch (Übersetzung)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  <select value={l.mode || currentTimingMode} onChange={(e) => updateLine(l.id, { mode: e.target.value })} className="px-1.5 py-1 rounded bg-white text-xs border border-gray-200" style={{ color: COLORS.ink }}>
+                    <option value="bar_beat">Takt / Schlag</option>
+                    <option value="sec">Absolut (Sekunden)</option>
+                    <option value="relative">Relativ (s seit letzter)</option>
+                    <option value="beat">Schlag absolut</option>
+                    <option value="relative_bar_beat">Relativ (Takt / Schlag)</option>
+                  </select>
 
-                <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>≈ {fmtTime(t)}</span>
+                  {l.mode === 'sec' && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: COLORS.inkDim }}>s:</span>
+                      <input type="number" step="0.1" value={l.timeSec !== undefined && l.timeSec !== null ? l.timeSec : ''} onChange={(e) => updateLine(l.id, { timeSec: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                    </div>
+                  )}
 
-                <div className="flex gap-1 ml-auto">
-                  <button onClick={() => insertLine(idx)} title="Zeile danach einfügen" aria-label="Zeile danach einfügen" className="p-1 rounded hover:bg-black/10 bg-white"><Plus size={14} /></button>
-                  <button onClick={() => moveLine(l.id, -1)} aria-label="Zeile nach oben" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronUp size={14} /></button>
-                  <button onClick={() => moveLine(l.id, 1)} aria-label="Zeile nach unten" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronDown size={14} /></button>
-                  <button onClick={() => removeLine(l.id)} aria-label="Zeile löschen" className="p-1 rounded hover:bg-black/10 bg-white"><Trash2 size={14} color={COLORS.danger} /></button>
+                  {l.mode === 'relative' && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: COLORS.inkDim }}>+s:</span>
+                      <input type="number" step="0.1" value={l.relativeSec !== undefined && l.relativeSec !== null ? l.relativeSec : ''} onChange={(e) => updateLine(l.id, { relativeSec: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                    </div>
+                  )}
+
+                  {l.mode === 'relative_bar_beat' && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: COLORS.inkDim }}>+Takt:</span>
+                      <input type="number" step="1" value={l.relativeBar !== undefined && l.relativeBar !== null ? l.relativeBar : ''} onChange={(e) => updateLine(l.id, { relativeBar: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                      <span style={{ color: COLORS.inkDim }}>+Schlag:</span>
+                      <input type="number" step="1" value={l.relativeBeat !== undefined && l.relativeBeat !== null ? l.relativeBeat : ''} onChange={(e) => updateLine(l.id, { relativeBeat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                    </div>
+                  )}
+
+                  {(l.mode === 'bar_beat' || !l.mode) && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: COLORS.inkDim }}>Takt:</span>
+                      <input type="number" step="1" min="1" value={l.bar !== undefined && l.bar !== null ? l.bar : 1} onChange={(e) => handleBarChange(l.id, e.target.value)} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                      <span style={{ color: COLORS.inkDim }}>Schlag:</span>
+                      <input type="number" step="1" min="1" max={song.timeSigNum || 4} value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                    </div>
+                  )}
+
+                  {l.mode === 'beat' && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: COLORS.inkDim }}>Schlag:</span>
+                      <input type="number" step="1" min="1" value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-1">
+                    <span style={{ color: COLORS.inkDim }} title="Anzeigedauer in Sekunden">Dauer (s):</span>
+                    <input type="number" step="0.1" min="0" placeholder="∞" value={l.duration !== undefined && l.duration !== null ? l.duration : ''} onChange={(e) => updateLine(l.id, { duration: e.target.value })} className="w-14 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                  </div>
+
+                  <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>≈ {fmtTime(t)}</span>
+
+                  <div className="flex gap-1 ml-auto">
+                    <button onClick={() => insertLine(idx)} title="Zeile danach einfügen" aria-label="Zeile danach einfügen" className="p-1 rounded hover:bg-black/10 bg-white"><Plus size={14} /></button>
+                    <button onClick={() => moveLine(l.id, -1)} aria-label="Zeile nach oben" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronUp size={14} /></button>
+                    <button onClick={() => moveLine(l.id, 1)} aria-label="Zeile nach unten" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronDown size={14} /></button>
+                    <button onClick={() => removeLine(l.id)} aria-label="Zeile löschen" className="p-1 rounded hover:bg-black/10 bg-white"><Trash2 size={14} color={COLORS.danger} /></button>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
       <div className="flex gap-2">
         <button onClick={addLine} className="flex-1 text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1" style={{ background: COLORS.amber, color: '#241a08' }}>
