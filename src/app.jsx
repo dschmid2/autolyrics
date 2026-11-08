@@ -851,18 +851,22 @@ function useSyncedState() {
   const [serverPort, setServerPort] = useState('');
   const playerIdRef = useRef(getOrCreatePlayerId());
   const wsRef = useRef(null);
+  const lastMessageTimeRef = useRef(Date.now());
 
   useEffect(() => {
     let cancelled = false;
     let retryTimer = null;
+    let heartbeatTimer = null;
 
     function connect() {
+      clearTimeout(retryTimer);
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${location.host}/ws`);
       wsRef.current = ws;
 
       ws.onopen = () => {
         if (!cancelled) {
+          lastMessageTimeRef.current = Date.now();
           setConnected(true);
           ws.send(JSON.stringify({ type: 'registerPlayer', playerId: playerIdRef.current }));
         }
@@ -870,12 +874,20 @@ function useSyncedState() {
       ws.onclose = () => {
         if (cancelled) return;
         setConnected(false);
+        clearTimeout(retryTimer);
         retryTimer = setTimeout(connect, 1500);
       };
       ws.onerror = () => ws.close();
       ws.onmessage = (ev) => {
+        lastMessageTimeRef.current = Date.now();
         try {
           const msg = JSON.parse(ev.data);
+          if (msg.type === 'ping') {
+            try { ws.send(JSON.stringify({ type: 'pong' })); } catch (e) {}
+            return;
+          }
+          if (msg.type === 'pong') return;
+
           if (msg.type === 'state') {
             setSongs(msg.songs);
             setPlayback(msg.playback);
@@ -891,9 +903,49 @@ function useSyncedState() {
     }
     connect();
 
+    // Heartbeat keepalive and watchdog
+    heartbeatTimer = setInterval(() => {
+      if (cancelled) return;
+      if (wsRef.current && wsRef.current.readyState === 1) {
+        try { wsRef.current.send(JSON.stringify({ type: 'ping' })); } catch (e) {}
+        if (Date.now() - lastMessageTimeRef.current > 35000) {
+          try { wsRef.current.close(); } catch (e) {}
+        }
+      }
+    }, 10000);
+
+    const checkAndReconnect = () => {
+      if (cancelled) return;
+      const isConnecting = wsRef.current && wsRef.current.readyState === 0;
+      const isOpen = wsRef.current && wsRef.current.readyState === 1;
+      const isTimedOut = isOpen && (Date.now() - lastMessageTimeRef.current > 25000);
+
+      if (!isConnecting && (!isOpen || isTimedOut)) {
+        if (wsRef.current) {
+          try { wsRef.current.close(); } catch (e) {}
+        }
+        clearTimeout(retryTimer);
+        connect();
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') checkAndReconnect();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pageshow', checkAndReconnect);
+    window.addEventListener('focus', checkAndReconnect);
+    window.addEventListener('online', checkAndReconnect);
+
     return () => {
       cancelled = true;
       clearTimeout(retryTimer);
+      clearInterval(heartbeatTimer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pageshow', checkAndReconnect);
+      window.removeEventListener('focus', checkAndReconnect);
+      window.removeEventListener('online', checkAndReconnect);
       if (wsRef.current) wsRef.current.close();
     };
   }, []);
@@ -1350,13 +1402,50 @@ function StageView({ songs, playback, onExit }) {
     }
   };
 
+  const measuredHeightsRef = useRef({});
+  const prevSongIdRef = useRef(song?.id);
+  const prevFontSizeRef = useRef(stageFontSize);
+  const prevSpacingRef = useRef(stageLineSpacing);
+
+  if (
+    prevSongIdRef.current !== song?.id ||
+    prevFontSizeRef.current !== stageFontSize ||
+    prevSpacingRef.current !== stageLineSpacing
+  ) {
+    prevSongIdRef.current = song?.id;
+    prevFontSizeRef.current = stageFontSize;
+    prevSpacingRef.current = stageLineSpacing;
+    measuredHeightsRef.current = {};
+    lineRefs.current = [];
+  }
+
   const lineRowHeight = Math.max(20, Math.round(stageFontSize * 1.2 + stageLineSpacing));
 
   const startIndex = Math.max(0, currentIdx - stagePastLines - 1);
   const endIndex = Math.min(lines.length - 1, currentIdx + stageFutureLines + 1);
 
+  // Compute top spacer height from the sum of measured heights of previous lines (or lineRowHeight fallback)
+  let topSpacerHeight = 0;
+  for (let i = 0; i < startIndex; i++) {
+    topSpacerHeight += (measuredHeightsRef.current[i] || lineRowHeight);
+  }
+
+  // Compute bottom spacer height from the sum of measured heights of subsequent lines (or lineRowHeight fallback)
+  let bottomSpacerHeight = 0;
+  for (let i = endIndex + 1; i < lines.length; i++) {
+    bottomSpacerHeight += (measuredHeightsRef.current[i] || lineRowHeight);
+  }
+
   // Dynamically compute the vertical center of the active line row so wrapped lines push subsequent lines down
   useEffect(() => {
+    // Record heights of all currently rendered line elements
+    for (let i = startIndex; i <= endIndex; i++) {
+      const el = lineRefs.current[i];
+      if (el && el.offsetHeight > 0) {
+        measuredHeightsRef.current[i] = el.offsetHeight;
+      }
+    }
+
     const updateOffset = () => {
       const activeEl = lineRefs.current[currentIdx];
       if (activeEl) {
@@ -1364,19 +1453,23 @@ function StageView({ songs, playback, onExit }) {
         const lineHeight = activeEl.offsetHeight;
         setActiveCenterOffset(lineTop + lineHeight / 2);
       } else {
-        setActiveCenterOffset((currentIdx + 0.5) * lineRowHeight);
+        let offset = 0;
+        for (let i = 0; i < currentIdx; i++) {
+          offset += (measuredHeightsRef.current[i] || lineRowHeight);
+        }
+        offset += (measuredHeightsRef.current[currentIdx] || lineRowHeight) / 2;
+        setActiveCenterOffset(offset);
       }
     };
 
     updateOffset();
-    window.addEventListener('resize', updateOffset);
-    return () => window.removeEventListener('resize', updateOffset);
-  }, [currentIdx, lines, stageFontSize, commentPercent, lineRowHeight, startIndex, endIndex]);
-
-  const topSpacerHeight = startIndex > 0 ? startIndex * lineRowHeight : 0;
-  const bottomSpacerHeight = lines.length > 0 && endIndex < lines.length - 1
-    ? (lines.length - 1 - endIndex) * lineRowHeight
-    : 0;
+    const handleResize = () => {
+      measuredHeightsRef.current = {};
+      updateOffset();
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [currentIdx, lines, stageFontSize, stageLineSpacing, commentPercent, lineRowHeight, startIndex, endIndex]);
 
   return (
     <div

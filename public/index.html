@@ -22,18 +22,33 @@
     if (!document.querySelector || !document.addEventListener) return false;
     if (!Array.prototype.forEach || !Array.prototype.map || !Array.prototype.filter) return false;
 
-    // Check modern ECMAScript capabilities required by React 18 & current bundle
+    // Detect older iOS devices (Safari, Chrome/CriOS, Firefox/FxiOS on iOS < 15)
+    var ua = navigator.userAgent || '';
+    var iosMatch = ua.match(/(?:iPad|iPhone|iPod).*?OS\s+(\d+)[._](\d+)/i);
+    if (!iosMatch && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) {
+      var safariMatch = ua.match(/Version\/(\d+)[._](\d+)/i);
+      if (safariMatch) iosMatch = safariMatch;
+    }
+    if (iosMatch) {
+      var major = parseInt(iosMatch[1], 10);
+      if (major < 15) return false;
+    }
+
+    // Check modern ECMAScript capabilities required by React 18 & esbuild bundle
+    // (ES6 classes, arrow functions, spread, template literals, const/let, default params,
+    // optional chaining ?., nullish coalescing ??, logical assignment ||=, async/await)
     try {
-      // Test ES6 classes, arrow functions, spread operator, template literals, const/let, default params
-      new Function('class _Test {}; const fn = (a = 1, ...rest) => ({ a: a, ...{ b: 2 } }); return fn();')();
+      new Function('class _T {}; const fn = async (a = 1, ...rest) => { var o = { b: 2 }; var c = 0; c ||= 1; return o?.b === 2 && (null ?? a) === 1 && c === 1; }; return fn();')();
     } catch (e) {
       return false;
     }
 
+    // Check modern APIs required by the bundle
     try {
-      // Test Promise, fetch, Object.assign, Symbol
       if (typeof Promise === 'undefined' || typeof fetch === 'undefined') return false;
       if (typeof Object.assign !== 'function' || typeof Symbol === 'undefined') return false;
+      if (typeof queueMicrotask !== 'function') return false;
+      if (typeof AbortController === 'undefined') return false;
     } catch (e) {
       return false;
     }
@@ -45,8 +60,31 @@
   var script = document.createElement('script');
   if (isSupported) {
     script.src = '/bundle.js';
+
+    // Fallback if bundle.js fails to load or execute on older engine
+    var fallbackTriggered = false;
+    function triggerLegacyFallback() {
+      if (fallbackTriggered) return;
+      fallbackTriggered = true;
+      if (!window.__autolyrics_loaded && window.location.search.indexOf('modern=1') === -1) {
+        var root = document.getElementById('root');
+        if (root && (!root.children || root.children.length === 0)) {
+          console.warn('Autolyrics bundle failed to initialize, falling back to legacy client.');
+          var fallbackScript = document.createElement('script');
+          fallbackScript.src = '/legacy.js';
+          document.body.appendChild(fallbackScript);
+        }
+      }
+    }
+
+    script.onerror = triggerLegacyFallback;
+    window.addEventListener('error', function(e) {
+      if (!window.__autolyrics_loaded) {
+        triggerLegacyFallback();
+      }
+    });
   } else {
-    // Load simple, lightweight legacy script for older browsers (e.g. old iPad / Safari)
+    // Load simple, lightweight legacy script for older browsers (e.g. old iPad / Safari / Chrome on iOS)
     script.src = '/legacy.js';
   }
   document.body.appendChild(script);

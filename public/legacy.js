@@ -205,19 +205,69 @@
 
   // --- WebSocket Connection ---
   var ws = null;
+  var reconnectTimer = null;
+  var lastMessageTime = Date.now();
+  var keepAliveInterval = null;
+
+  function sendWsPing() {
+    if (ws && ws.readyState === 1) {
+      try {
+        ws.send(JSON.stringify({ type: 'ping' }));
+      } catch (e) {}
+    }
+  }
+
+  function checkWatchdog() {
+    if (ws && ws.readyState === 1 && Date.now() - lastMessageTime > 35000) {
+      try { ws.close(); } catch (e) {}
+    }
+  }
+
+  function checkAndReconnect() {
+    var isConnecting = ws && ws.readyState === 0;
+    var isOpen = ws && ws.readyState === 1;
+    var isTimedOut = isOpen && (Date.now() - lastMessageTime > 25000);
+
+    if (!isConnecting && (!isOpen || isTimedOut)) {
+      if (ws) {
+        try { ws.close(); } catch (e) {}
+      }
+      clearTimeout(reconnectTimer);
+      connectWebSocket();
+    }
+  }
+
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') {
+      checkAndReconnect();
+    }
+  });
+  window.addEventListener('pageshow', checkAndReconnect);
+  window.addEventListener('focus', checkAndReconnect);
+  window.addEventListener('online', checkAndReconnect);
+
+  if (!keepAliveInterval) {
+    keepAliveInterval = setInterval(function() {
+      sendWsPing();
+      checkWatchdog();
+    }, 10000);
+  }
+
   function connectWebSocket() {
+    clearTimeout(reconnectTimer);
     var proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
     var wsUrl = proto + '://' + window.location.host + '/ws';
 
     try {
       ws = new WebSocket(wsUrl);
     } catch (e) {
-      setTimeout(connectWebSocket, 2000);
+      reconnectTimer = setTimeout(connectWebSocket, 2000);
       return;
     }
 
     ws.onopen = function() {
       state.connected = true;
+      lastMessageTime = Date.now();
       if (blackoutTimer) {
         clearTimeout(blackoutTimer);
         blackoutTimer = null;
@@ -238,7 +288,8 @@
           render();
         }, 30000);
       }
-      setTimeout(connectWebSocket, 1500);
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connectWebSocket, 1500);
     };
 
     ws.onerror = function() {
@@ -246,8 +297,16 @@
     };
 
     ws.onmessage = function(ev) {
+      lastMessageTime = Date.now();
       try {
         var msg = JSON.parse(ev.data);
+        if (msg.type === 'ping') {
+          try { ws.send(JSON.stringify({ type: 'pong' })); } catch (e) {}
+          return;
+        }
+        if (msg.type === 'pong') {
+          return;
+        }
         if (msg.type === 'state') {
           if (msg.songs) state.songs = msg.songs;
           if (msg.playback) state.playback = msg.playback;
@@ -306,6 +365,11 @@
     rootEl.innerHTML = html;
   }
 
+  var stageMeasuredHeights = {};
+  var stageLastSongId = null;
+  var stageLastFontSize = null;
+  var stageLastSpacing = null;
+
   function renderStageView(song, playback, elapsed) {
     var lines = song ? sortedLines(song) : [];
     var stageLeadSeconds = playback.stageLeadSeconds !== undefined ? playback.stageLeadSeconds : 0;
@@ -316,11 +380,25 @@
     var stageFontSize = playback.stageFontSize !== undefined ? playback.stageFontSize : 64;
     var commentPercent = playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20;
 
+    var songId = song ? song.id : null;
+    if (songId !== stageLastSongId || stageFontSize !== stageLastFontSize || stageLineSpacing !== stageLastSpacing) {
+      stageMeasuredHeights = {};
+      stageLastSongId = songId;
+      stageLastFontSize = stageFontSize;
+      stageLastSpacing = stageLineSpacing;
+    }
+
     var idx = song ? currentIndex(lines, elapsed + stageLeadSeconds) : -1;
     var currentIdx = idx >= 0 ? idx : 0;
 
     var lineRowHeight = Math.max(20, Math.round(stageFontSize * 1.2 + stageLineSpacing));
-    var activeCenterOffset = (currentIdx + 0.5) * lineRowHeight;
+
+    // Calculate active center offset using measured line heights to prevent downward drift from wrapped lines
+    var activeCenterOffset = 0;
+    for (var k = 0; k < currentIdx; k++) {
+      activeCenterOffset += (stageMeasuredHeights[k] || lineRowHeight);
+    }
+    activeCenterOffset += ((stageMeasuredHeights[currentIdx] || lineRowHeight) / 2);
 
     var linesHtml = '';
     if (lines.length === 0) {
@@ -336,7 +414,7 @@
 
         if (commentPercent === 0) {
           linesHtml += [
-            '<div style="min-height: ' + lineRowHeight + 'px; width: 100%; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center; padding: 8px 0; opacity: ' + opacity + '; pointer-events: ' + pointerEvents + '; -webkit-transition: opacity 0.5s ease-out; transition: opacity 0.5s ease-out; box-sizing: border-box;">',
+            '<div id="legacy-stage-line-' + i + '" style="min-height: ' + lineRowHeight + 'px; width: 100%; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center; padding: 8px 0; opacity: ' + opacity + '; pointer-events: ' + pointerEvents + '; -webkit-transition: opacity 0.5s ease-out; transition: opacity 0.5s ease-out; box-sizing: border-box;">',
             '  <div style="color: ' + (isCurrent ? COLORS.stageText : COLORS.stageTextDim) + '; font-family: Gelasio, Georgia, serif; font-size: ' + stageFontSize + 'px; line-height: 1.2; text-align: left; font-weight: bold; width: 100%; word-break: break-word;">',
             escapeHtml(l.en),
             '  </div>',
@@ -348,7 +426,7 @@
           var textColor = isCurrent ? COLORS.stageText : COLORS.stageTextDim;
 
           linesHtml += [
-            '<div style="min-height: ' + lineRowHeight + 'px; width: 100%; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center; padding: 8px 0; opacity: ' + opacity + '; pointer-events: ' + pointerEvents + '; -webkit-transition: opacity 0.5s ease-out; transition: opacity 0.5s ease-out; box-sizing: border-box;">',
+            '<div id="legacy-stage-line-' + i + '" style="min-height: ' + lineRowHeight + 'px; width: 100%; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center; padding: 8px 0; opacity: ' + opacity + '; pointer-events: ' + pointerEvents + '; -webkit-transition: opacity 0.5s ease-out; transition: opacity 0.5s ease-out; box-sizing: border-box;">',
             '  <div style="width: ' + commentPercent + '%; text-align: right; font-family: ui-sans-serif, system-ui, sans-serif; font-size: ' + (stageFontSize * 0.5) + 'px; line-height: 1.2; color: ' + commentColor + '; font-weight: ' + commentWeight + '; padding-right: 20px; box-sizing: border-box; word-break: break-word; -webkit-flex-shrink: 0; flex-shrink: 0;">',
             escapeHtml(l.comment || ''),
             '  </div>',
@@ -384,6 +462,26 @@
     ].join('\n');
 
     rootEl.innerHTML = html;
+
+    // Cache rendered line element heights and adjust scroller transform from real DOM measurements
+    if (lines.length > 0) {
+      for (var m = 0; m < lines.length; m++) {
+        var lineEl = document.getElementById('legacy-stage-line-' + m);
+        if (lineEl && lineEl.offsetHeight > 0) {
+          stageMeasuredHeights[m] = lineEl.offsetHeight;
+        }
+      }
+      var activeEl = document.getElementById('legacy-stage-line-' + currentIdx);
+      if (activeEl) {
+        var realCenter = activeEl.offsetTop + activeEl.offsetHeight / 2;
+        var scrollerEl = document.getElementById('stage-scroller');
+        if (scrollerEl && Math.abs(realCenter - activeCenterOffset) > 1) {
+          var realTransform = 'translateY(-' + realCenter + 'px)';
+          scrollerEl.style.webkitTransform = realTransform;
+          scrollerEl.style.transform = realTransform;
+        }
+      }
+    }
 
     var fsBtn = document.getElementById('legacy-fs-btn');
     if (fsBtn) {
@@ -517,6 +615,12 @@
 
   // Handle URL history popstate
   window.addEventListener('popstate', function() {
+    render();
+  });
+
+  // Handle window resize / iPad orientation change
+  window.addEventListener('resize', function() {
+    stageMeasuredHeights = {};
     render();
   });
 
