@@ -361,7 +361,7 @@ function WaveformCanvas({ audioBuffer, pxPerSec, bpm, timeSigNum, duration, widt
   return <canvas ref={canvasRef} style={{ width: `${width}px`, height: `${height}px`, display: 'block' }} />;
 }
 
-function WaveformEditor({ song, computedLines, onUpdateSong }) {
+function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChange, seekRef }) {
   const { audioBuffer, loading, error } = useAudioBuffer(song.audioUrl);
   const audioRef = useRef(null);
   const containerRef = useRef(null);
@@ -465,10 +465,10 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
     }
   };
 
-  const seekNudge = (delta) => {
-    const newSongTime = Math.max(0, Math.min(totalDuration, currentTime + delta));
-    setCurrentTime(newSongTime);
-    const targetAudioTime = newSongTime - audioOffset;
+  const seekToTime = useCallback((timeSec) => {
+    const clampedTime = Math.max(0, Math.min(totalDuration, timeSec));
+    setCurrentTime(clampedTime);
+    const targetAudioTime = clampedTime - audioOffset;
     if (audioRef.current && audioBuffer) {
       if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
         audioRef.current.currentTime = targetAudioTime;
@@ -478,9 +478,19 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
     }
     if (containerRef.current) {
       const container = containerRef.current;
-      const headX = newSongTime * pxPerSec;
+      const headX = clampedTime * pxPerSec;
       container.scrollLeft = Math.max(0, headX - container.clientWidth / 2);
     }
+  }, [totalDuration, audioOffset, audioBuffer, audioDuration, pxPerSec]);
+
+  useEffect(() => {
+    if (seekRef) {
+      seekRef.current = seekToTime;
+    }
+  }, [seekRef, seekToTime]);
+
+  const seekNudge = (delta) => {
+    seekToTime(currentTime + delta);
   };
 
   const addMarkerAtCurrentTime = () => {
@@ -513,6 +523,17 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
 
   const activeIdx = currentIndex(computedLines, currentTime);
   const activeLine = activeIdx >= 0 ? computedLines[activeIdx] : null;
+
+  useEffect(() => {
+    if (onPlaybackStateChange) {
+      onPlaybackStateChange({
+        isPlaying,
+        currentTime,
+        activeIdx,
+        activeLineId: activeLine ? activeLine.id : null,
+      });
+    }
+  }, [onPlaybackStateChange, isPlaying, currentTime, activeIdx, activeLine]);
 
   const handleContainerClick = (e) => {
     if (isDragging) return;
@@ -2274,9 +2295,30 @@ function ImportExport({ songs, onImport }) {
 function SongEditor({ song, onChange, onDelete }) {
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
+  const [waveformPlayback, setWaveformPlayback] = useState({ isPlaying: false, currentTime: 0, activeIdx: -1, activeLineId: null });
+  const waveformSeekRef = useRef(null);
+  const activeLineRowRef = useRef(null);
+
+  useEffect(() => {
+    if (waveformPlayback.isPlaying && activeLineRowRef.current) {
+      activeLineRowRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      });
+    }
+  }, [waveformPlayback.isPlaying, waveformPlayback.activeLineId]);
 
   const update = (patch) => onChange({ ...song, ...patch });
   const updateLine = (id, patch) => update({ lines: song.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
+
+  const jumpToLineMarker = (lineId) => {
+    if (waveformSeekRef.current) {
+      const computed = computedLines.find((cl) => cl.id === lineId);
+      if (computed && computed.t !== undefined) {
+        waveformSeekRef.current(computed.t);
+      }
+    }
+  };
 
   const handleBarChange = (lineId, newBarVal) => {
     const lineIndex = song.lines.findIndex((l) => l.id === lineId);
@@ -2524,7 +2566,13 @@ function SongEditor({ song, onChange, onDelete }) {
         </div>
 
         {song.audioUrl ? (
-          <WaveformEditor song={song} computedLines={computedLines} onUpdateSong={update} />
+          <WaveformEditor
+            song={song}
+            computedLines={computedLines}
+            onUpdateSong={update}
+            onPlaybackStateChange={setWaveformPlayback}
+            seekRef={waveformSeekRef}
+          />
         ) : (
           <div className="p-4 text-center border-2 border-dashed rounded-lg text-xs" style={{ borderColor: COLORS.line, color: COLORS.inkDim }}>
             Keine MP3-Datei verknüpft. Lade eine MP3 hoch, um die interaktive Wellenform mit Zeitstempel-Markern zu nutzen.
@@ -2552,11 +2600,34 @@ function SongEditor({ song, onChange, onDelete }) {
 
         <div className="max-h-[calc(100vh-28rem)] min-h-[160px] overflow-y-auto space-y-2 pr-1 rounded-xl">
           {song.lines.map((l, idx) => {
-            const computedLine = computedLines.find((cl) => cl.id === l.id);
+            const computedIdx = computedLines.findIndex((cl) => cl.id === l.id);
+            const computedLine = computedIdx >= 0 ? computedLines[computedIdx] : null;
             const t = computedLine ? computedLine.t : 0;
+            const lineNum = computedIdx >= 0 ? computedIdx + 1 : idx + 1;
+            const isPlayingActive = waveformPlayback.isPlaying && waveformPlayback.activeLineId === l.id;
             return (
-              <div key={l.id} className="rounded-lg p-2 space-y-1" style={{ background: COLORS.panelBg2 }}>
+              <div
+                key={l.id}
+                ref={isPlayingActive ? activeLineRowRef : null}
+                onClick={() => jumpToLineMarker(l.id)}
+                className={`rounded-lg p-2 space-y-1 transition-all ${
+                  isPlayingActive ? 'ring-2 ring-amber-500 shadow-md' : ''
+                }`}
+                style={{
+                  background: isPlayingActive ? '#FDE047' : COLORS.panelBg2,
+                  color: COLORS.ink,
+                }}
+              >
                 <div className="flex gap-2 items-center">
+                  <span
+                    className={`font-mono text-xs font-bold px-2 py-1 rounded shrink-0 select-none ${
+                      isPlayingActive ? 'bg-amber-400 text-black shadow-sm' : 'bg-black/5'
+                    }`}
+                    style={{ color: isPlayingActive ? '#000' : COLORS.ink }}
+                    title={`Marker #${lineNum}`}
+                  >
+                    #{lineNum}
+                  </span>
                   <input
                     value={l.en}
                     onChange={(e) => updateLine(l.id, { en: e.target.value })}
