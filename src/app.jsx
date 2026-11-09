@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Play, Pause, Square, SkipBack, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Trash2, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Tablet, Sliders, MonitorPlay, Tv, Eye, QrCode } from 'lucide-react';
+import { Play, Pause, Square, SkipBack, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Trash2, Maximize2, X, Settings2, Download, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Tablet, Sliders, MonitorPlay, Tv, Eye, QrCode } from 'lucide-react';
 import versionData from './version.json';
 
 const COLORS = {
@@ -2252,22 +2252,38 @@ function ControlView({
 }
 
 function ImportExport({ songs, onImport }) {
-  const [text, setText] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
   const [mode, setMode] = useState('replace');
   const [importFormat, setImportFormat] = useState('json');
   const [songTitle, setSongTitle] = useState('Neuer Song');
   const [bpm, setBpm] = useState(90);
+  const [selectedFileName, setSelectedFileName] = useState('');
+  const [fileContent, setFileContent] = useState('');
+  const fileInputRef = useRef(null);
 
-  const exportText = JSON.stringify(songs, null, 2);
-
-  const doCopy = async () => {
-    try { await navigator.clipboard.writeText(exportText); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) {}
+  const downloadSongs = () => {
+    try {
+      const exportText = JSON.stringify(songs, null, 2);
+      const blob = new Blob([exportText], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'songs.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setDownloaded(true);
+      setTimeout(() => setDownloaded(false), 1500);
+    } catch (e) {
+      alert('Download-Fehler: ' + e.message);
+    }
   };
-  const doImport = () => {
+
+  const processImport = (content) => {
     try {
       if (importFormat === 'plaintext') {
-        const parsedLines = parsePlaintextSongLines(text);
+        const parsedLines = parsePlaintextSongLines(content);
         if (!parsedLines.length) throw new Error('Keine gültigen Textzeilen gefunden');
         const newSong = {
           id: uid(),
@@ -2278,44 +2294,65 @@ function ImportExport({ songs, onImport }) {
           lines: parsedLines,
         };
         onImport(mode === 'replace' ? [newSong] : [...songs, newSong]);
-        setText('');
+        setFileContent('');
+        setSelectedFileName('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
 
-      const parsed = JSON.parse(text);
-      if (!Array.isArray(parsed)) throw new Error('erwartet ein Array von Songs');
-      const withIds = parsed.map((s) => ({ ...s, id: s.id || uid(), lines: (s.lines || []).map((l) => ({ ...l, id: l.id || uid() })) }));
+      const parsed = JSON.parse(content);
+      const songList = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.songs) ? parsed.songs : null);
+      if (!songList) throw new Error('Erwartet ein Array von Songs oder ein Objekt mit einer "songs"-Eigenschaft');
+      const withIds = songList.map((s) => ({ ...s, id: s.id || uid(), lines: (s.lines || []).map((l) => ({ ...l, id: l.id || uid() })) }));
       onImport(mode === 'replace' ? withIds : [...songs, ...withIds]);
-      setText('');
-    } catch (e) { alert('Import-Fehler: ' + e.message); }
+      setFileContent('');
+      setSelectedFileName('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (e) {
+      alert('Import-Fehler: ' + e.message);
+    }
   };
-  const onFile = (e) => {
+
+  const onFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    setSelectedFileName(file.name);
     const reader = new FileReader();
-    reader.onload = () => setText(String(reader.result));
+    reader.onload = () => {
+      setFileContent(String(reader.result));
+    };
     reader.readAsText(file);
   };
 
   return (
     <div className="space-y-3 pt-4 mt-4 border-t" style={{ borderColor: COLORS.panelBg2 }}>
       <div className="text-xs uppercase tracking-wide font-bold" style={{ color: COLORS.inkDim }}>Import / Export</div>
-      <button onClick={doCopy} className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>
-        {copied ? <Check size={12} /> : <Copy size={12} />} Alle Songs als JSON kopieren
+      <button onClick={downloadSongs} className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5 font-medium transition-colors" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>
+        {downloaded ? <Check size={14} className="text-green-600" /> : <Download size={14} />} Alle Songs als JSON herunterladen
       </button>
 
       <div className="flex gap-2 border-b pb-2 text-xs" style={{ borderColor: COLORS.line }}>
         <button
-          onClick={() => setImportFormat('json')}
+          onClick={() => {
+            setImportFormat('json');
+            setFileContent('');
+            setSelectedFileName('');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }}
           className={`px-3 py-1 rounded-lg font-medium transition-colors ${importFormat === 'json' ? 'bg-amber-500 text-black font-bold' : 'bg-zinc-200 text-zinc-700'}`}
         >
-          JSON Import
+          JSON Datei-Import
         </button>
         <button
-          onClick={() => setImportFormat('plaintext')}
+          onClick={() => {
+            setImportFormat('plaintext');
+            setFileContent('');
+            setSelectedFileName('');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }}
           className={`px-3 py-1 rounded-lg font-medium transition-colors ${importFormat === 'plaintext' ? 'bg-amber-500 text-black font-bold' : 'bg-zinc-200 text-zinc-700'}`}
         >
-          Klartext Import (.txt)
+          Klartext Datei-Import (.txt)
         </button>
       </div>
 
@@ -2342,19 +2379,39 @@ function ImportExport({ songs, onImport }) {
         </div>
       )}
 
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={importFormat === 'plaintext' ? "Klartext hier einfügen...\nJede Zeile entspricht einem Takt.\n*Zeile für Nur-Stageview\n[Solo] Zeile mit Kommentar" : "JSON hier einfügen zum Importieren…"}
-        rows={5}
-        className="w-full text-xs rounded-lg p-2 font-mono"
-        style={{ background: COLORS.panelBg2, color: COLORS.ink }}
-      />
+      <div className="p-3 rounded-lg border border-dashed flex flex-col gap-2" style={{ borderColor: COLORS.inkDim, background: COLORS.panelBg2 }}>
+        <div className="flex items-center gap-2">
+          <Upload size={16} style={{ color: COLORS.inkDim }} />
+          <span className="text-xs font-semibold" style={{ color: COLORS.ink }}>
+            {importFormat === 'plaintext' ? 'Songtext-Datei auswählen (.txt)' : 'Song-Datei auswählen (.json)'}
+          </span>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={importFormat === 'plaintext' ? ".txt,text/plain" : "application/json"}
+          onChange={onFileSelect}
+          className="text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-white hover:file:bg-zinc-700 cursor-pointer"
+          style={{ color: COLORS.inkDim }}
+        />
+        {selectedFileName && (
+          <div className="text-xs font-mono text-zinc-700 truncate">
+            Ausgewählt: <span className="font-bold">{selectedFileName}</span>
+          </div>
+        )}
+      </div>
+
       <div className="flex items-center gap-3 flex-wrap">
-        <input type="file" accept={importFormat === 'plaintext' ? ".txt,text/plain" : "application/json"} onChange={onFile} className="text-xs" style={{ color: COLORS.inkDim }} />
         <label className="text-xs flex items-center gap-1" style={{ color: COLORS.inkDim }}><input type="radio" checked={mode === 'replace'} onChange={() => setMode('replace')} /> Ersetzen</label>
         <label className="text-xs flex items-center gap-1" style={{ color: COLORS.inkDim }}><input type="radio" checked={mode === 'merge'} onChange={() => setMode('merge')} /> Hinzufügen</label>
-        <button onClick={doImport} disabled={!text.trim()} className="text-xs px-3 py-1.5 rounded-full disabled:opacity-40" style={{ background: COLORS.amber, color: '#241a08' }}>Importieren</button>
+        <button
+          onClick={() => processImport(fileContent)}
+          disabled={!fileContent.trim()}
+          className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1 disabled:opacity-40 font-medium"
+          style={{ background: COLORS.amber, color: '#241a08' }}
+        >
+          <Upload size={12} /> Datei importieren
+        </button>
       </div>
     </div>
   );

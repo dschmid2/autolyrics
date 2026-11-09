@@ -43,7 +43,7 @@ Autolyrics bietet verschiedene spezialisierte Ansichten, die über das Netzwerk 
   * Absolut in Sekunden
   * Relativ zur vorherigen Zeile (in Sekunden oder Takten/Schlägen)
   * Absolut in Takten und Schlägen (Bar/Beat)
-* **JSON Import & Export**: Sichern und Wiederherstellen der gesamten Songbibliothek.
+* **Datei-basierter JSON Import & Export**: Sichern der gesamten Songbibliothek durch Download als JSON-Datei und Wiederherstellen über Datei-Upload (statt Zwischenablage).
 
 ### 6. Anzeige-Optionen (`/options`)
 * Anpassung von Schriftgrößen (Haupttext & Übersetzung).
@@ -60,7 +60,7 @@ Die Anwendung ist als Lightweight-Fullstack-Webanwendung aufgebaut:
 * **Backend**:
   * **Node.js & Express**: HTTP-Server für statische Dateien, API-Routen (`/api/upload`) und Ansichts-Routing (`/live`, `/stage`, `/player`).
   * **WebSocket (`ws`)**: Bidirektionale Echtzeit-Synchronisation des Wiedergabestatus, der Songdaten und der verbundenen Player.
-  * **Datenpersistenz**: Speicherung aller Songs, Einstellungen und Player-Zustände in einer lokalen JSON-Datei (`data/state.json`).
+  * **Datenpersistenz**: Getrennte Speicherung in separaten JSON-Dateien (`data/songs.json`, `data/playback.json`, `data/players.json`), mit automatischer Migration von `data/state.json`.
   * **Multer**: Handhabung von Audio-Uploads in das Verzeichnis `data/uploads/`.
 * **Frontend**:
   * **React 18**: UI-Komponentenbibliothek.
@@ -76,7 +76,9 @@ Die Anwendung ist als Lightweight-Fullstack-Webanwendung aufgebaut:
 ```text
 autolyrics/
 ├── data/                  # Persistente Daten (wird zur Laufzeit erstellt)
-│   ├── state.json         # Gespeicherter Zustand (Songs, Wiedergabe, Player)
+│   ├── songs.json         # Gespeicherte Songs
+│   ├── playback.json      # Wiedergabestatus & Optionen
+│   ├── players.json       # Registrierte Endgeräte (Player)
 │   └── uploads/           # Hochgeladene MP3-Dateien
 ├── public/                # Statische Web-Assets & gebündelter Output
 │   ├── bundle.js          # Gebündeltes Frontend-JavaScript

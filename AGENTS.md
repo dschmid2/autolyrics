@@ -10,7 +10,7 @@ Autolyrics is a lightweight, real-time web application for synchronized song lyr
 
 * **Backend**: Node.js + Express (`server/index.js`) + WebSocket (`ws` library on `/ws`).
 * **Frontend**: Single Page Application (SPA) in React 18 (`src/app.jsx`), styled with Tailwind CSS (`src/styles.css`).
-* **Data Storage**: Single JSON file located at `data/state.json` (overridden via `DATA_DIR` environment variable).
+* **Data Storage**: Separate JSON files (`songs.json`, `playback.json`, `players.json`) located in `data/` (overridden via `DATA_DIR` environment variable), with legacy fallback/migration from `state.json`.
 * **Media Uploads**: Audio files (MP3s) stored in `data/uploads/` and served statically via `/uploads/`.
 * **Build System**: `esbuild` for bundling React JSX to `public/bundle.js` and `tailwindcss` CLI for compiling `public/styles.css`.
 
@@ -38,36 +38,39 @@ Autolyrics is a lightweight, real-time web application for synchronized song lyr
 
 ## 3. Data Models & Synchronization
 
-### Persistent State (`data/state.json`)
-The application state is persisted in a single JSON structure:
+### Persistent State (`data/songs.json`, `data/playback.json`, `data/players.json`)
+The application state is persisted across three separate JSON files:
+* `data/songs.json`: Array of song objects: `[ { id, title, bpm, timingMode, lines, ... } ]`
+* `data/playback.json`: Playback state object:
 ```json
 {
-  "songs": [ ... ],
-  "playback": {
-    "songId": "demo-1",
-    "status": "stopped" | "playing" | "paused",
-    "anchorEpoch": 1700000000000,
-    "anchorElapsed": 0,
-    "updatedAt": 1700000000000,
-    "fontSize": 64,
-    "translationPercent": 60,
-    "positionX": 50,
-    "positionY": 50,
-    "showHeartbeat": true,
-    "stagePastLines": 2,
-    "stageFutureLines": 2,
-    "stageLeadSeconds": 0
-  },
-  "players": {
-    "<player_uuid>": {
-      "id": "<player_uuid>",
-      "role": "live" | "stage" | null,
-      "lastSeen": 1700000000000,
-      "online": true
-    }
+  "songId": "demo-1",
+  "status": "stopped" | "playing" | "paused",
+  "anchorEpoch": 1700000000000,
+  "anchorElapsed": 0,
+  "updatedAt": 1700000000000,
+  "fontSize": 64,
+  "translationPercent": 60,
+  "positionX": 50,
+  "positionY": 50,
+  "showHeartbeat": true,
+  "stagePastLines": 2,
+  "stageFutureLines": 2,
+  "stageLeadSeconds": 0
+}
+```
+* `data/players.json`: Map of registered player objects:
+```json
+{
+  "<player_uuid>": {
+    "id": "<player_uuid>",
+    "role": "live" | "stage" | null,
+    "lastSeen": 1700000000000,
+    "online": true
   }
 }
 ```
+If `state.json` exists from earlier versions, the server automatically reads and migrates the data to these files.
 
 ### WebSocket Communication Protocol (`/ws`)
 * **Server to Client**:

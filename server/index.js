@@ -20,7 +20,10 @@ function getLocalIpAddress() {
   return 'localhost';
 }
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
-const DATA_FILE = path.join(DATA_DIR, 'state.json');
+const SONGS_FILE = path.join(DATA_DIR, 'songs.json');
+const PLAYBACK_FILE = path.join(DATA_DIR, 'playback.json');
+const PLAYERS_FILE = path.join(DATA_DIR, 'players.json');
+const LEGACY_STATE_FILE = path.join(DATA_DIR, 'state.json');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -79,28 +82,122 @@ const DEMO_SONG = {
 };
 
 function loadState() {
-  try {
-    const raw = fs.readFileSync(DATA_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    return {
-      songs: Array.isArray(parsed.songs) ? parsed.songs : [DEMO_SONG],
-      playback: parsed.playback || defaultPlayback(),
-      players: typeof parsed.players === 'object' && parsed.players !== null ? parsed.players : {},
-    };
-  } catch (e) {
-    return { songs: [DEMO_SONG], playback: defaultPlayback(), players: {} };
+  let legacyData = null;
+  if (fs.existsSync(LEGACY_STATE_FILE)) {
+    try {
+      legacyData = JSON.parse(fs.readFileSync(LEGACY_STATE_FILE, 'utf8'));
+    } catch (e) {
+      console.warn('Fehler beim Lesen der Legacy-Datei state.json:', e.message);
+    }
   }
+
+  let songs = null;
+  if (fs.existsSync(SONGS_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(SONGS_FILE, 'utf8'));
+      if (Array.isArray(parsed)) songs = parsed;
+    } catch (e) {
+      console.warn('Fehler beim Lesen von songs.json:', e.message);
+    }
+  }
+  if (!songs) {
+    if (legacyData && Array.isArray(legacyData.songs)) {
+      songs = legacyData.songs;
+    } else {
+      songs = [DEMO_SONG];
+    }
+  }
+
+  let playback = null;
+  if (fs.existsSync(PLAYBACK_FILE)) {
+    try {
+      playback = JSON.parse(fs.readFileSync(PLAYBACK_FILE, 'utf8'));
+    } catch (e) {
+      console.warn('Fehler beim Lesen von playback.json:', e.message);
+    }
+  }
+  if (!playback) {
+    if (legacyData && legacyData.playback) {
+      playback = legacyData.playback;
+    } else {
+      playback = defaultPlayback();
+    }
+  }
+
+  let players = null;
+  if (fs.existsSync(PLAYERS_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(PLAYERS_FILE, 'utf8'));
+      if (typeof parsed === 'object' && parsed !== null) players = parsed;
+    } catch (e) {
+      console.warn('Fehler beim Lesen von players.json:', e.message);
+    }
+  }
+  if (!players) {
+    if (legacyData && typeof legacyData.players === 'object' && legacyData.players !== null) {
+      players = legacyData.players;
+    } else {
+      players = {};
+    }
+  }
+
+  return { songs, playback, players };
 }
 
 let state = loadState();
-let saveTimer = null;
-function persist() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
+
+let saveTimers = {
+  songs: null,
+  playback: null,
+  players: null
+};
+
+function persistSongs() {
+  clearTimeout(saveTimers.songs);
+  saveTimers.songs = setTimeout(() => {
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(SONGS_FILE, JSON.stringify(state.songs, null, 2));
+    } catch (e) {
+      console.error('Fehler beim Schreiben von songs.json:', e.message);
+    }
   }, 150);
 }
+
+function persistPlayback() {
+  clearTimeout(saveTimers.playback);
+  saveTimers.playback = setTimeout(() => {
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(PLAYBACK_FILE, JSON.stringify(state.playback, null, 2));
+    } catch (e) {
+      console.error('Fehler beim Schreiben von playback.json:', e.message);
+    }
+  }, 150);
+}
+
+function persistPlayers() {
+  clearTimeout(saveTimers.players);
+  saveTimers.players = setTimeout(() => {
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(PLAYERS_FILE, JSON.stringify(state.players, null, 2));
+    } catch (e) {
+      console.error('Fehler beim Schreiben von players.json:', e.message);
+    }
+  }, 150);
+}
+
+function persistAll() {
+  persistSongs();
+  persistPlayback();
+  persistPlayers();
+}
+
+// Initial write if files do not exist yet (e.g. migration from state.json or fresh start)
+if (!fs.existsSync(SONGS_FILE)) persistSongs();
+if (!fs.existsSync(PLAYBACK_FILE)) persistPlayback();
+if (!fs.existsSync(PLAYERS_FILE)) persistPlayers();
 
 const app = express();
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -155,7 +252,7 @@ wss.on('connection', (ws) => {
         lastSeen: Date.now(),
         online: true,
       };
-      persist();
+      persistPlayers();
       broadcast({ type: 'players', players: state.players });
     }
 
@@ -166,24 +263,24 @@ wss.on('connection', (ws) => {
         role: msg.role || null,
         lastSeen: Date.now(),
       };
-      persist();
+      persistPlayers();
       broadcast({ type: 'players', players: state.players });
     }
 
     if (msg.type === 'deletePlayer' && msg.playerId) {
       delete state.players[msg.playerId];
-      persist();
+      persistPlayers();
       broadcast({ type: 'players', players: state.players });
     }
 
     if (msg.type === 'setSongs' && Array.isArray(msg.songs)) {
       state.songs = msg.songs;
-      persist();
+      persistSongs();
       broadcast({ type: 'songs', songs: state.songs }, ws);
     }
     if (msg.type === 'setPlayback' && msg.playback) {
       state.playback = { ...msg.playback, updatedAt: Date.now() };
-      persist();
+      persistPlayback();
       broadcast({ type: 'playback', playback: state.playback }, ws);
     }
   });
@@ -195,7 +292,7 @@ wss.on('connection', (ws) => {
         online: false,
         lastSeen: Date.now(),
       };
-      persist();
+      persistPlayers();
       broadcast({ type: 'players', players: state.players });
     }
   });
@@ -203,5 +300,5 @@ wss.on('connection', (ws) => {
 
 server.listen(PORT, () => {
   console.log(`Autolyrics läuft auf Port ${PORT}`);
-  console.log(`Daten werden gespeichert unter: ${DATA_FILE}`);
+  console.log(`Daten werden gespeichert im Verzeichnis: ${DATA_DIR}`);
 });
