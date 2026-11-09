@@ -1573,11 +1573,11 @@ function StageView({ songs, playback, onExit }) {
                       minHeight: `${lineRowHeight}px`,
                       gridTemplateColumns: `${commentPercent}% 1fr`
                     }}
-                    className={`grid items-center w-full shrink-0 py-2 transition-opacity duration-500 ${
+                    className={`grid items-start w-full shrink-0 py-2 transition-opacity duration-500 ${
                       !isVisible ? 'opacity-0 pointer-events-none' : ''
                     }`}
                   >
-                    {/* Left Column: Comment (Right-aligned, wraps without truncation, uniform bold font weight) */}
+                    {/* Left Column: Comment (Right-aligned, wraps without truncation, uniform bold font weight, top-aligned) */}
                     <div
                       style={{
                         color: isCurrent ? COLORS.amber : COLORS.stageTextDim,

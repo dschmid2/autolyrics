@@ -348,7 +348,7 @@
           var textColor = isCurrent ? COLORS.stageText : COLORS.stageTextDim;
 
           linesHtml += [
-            '<div style="min-height: ' + lineRowHeight + 'px; width: 100%; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center; padding: 8px 0; opacity: ' + opacity + '; pointer-events: ' + pointerEvents + '; -webkit-transition: opacity 0.5s ease-out; transition: opacity 0.5s ease-out; box-sizing: border-box;">',
+            '<div style="min-height: ' + lineRowHeight + 'px; width: 100%; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: start; -webkit-align-items: flex-start; align-items: flex-start; padding: 8px 0; opacity: ' + opacity + '; pointer-events: ' + pointerEvents + '; -webkit-transition: opacity 0.5s ease-out; transition: opacity 0.5s ease-out; box-sizing: border-box;">',
             '  <div style="width: ' + commentPercent + '%; text-align: right; font-family: ui-sans-serif, system-ui, sans-serif; font-size: ' + (stageFontSize * 0.5) + 'px; line-height: 1.2; color: ' + commentColor + '; font-weight: ' + commentWeight + '; padding-right: 20px; box-sizing: border-box; word-break: break-word; -webkit-flex-shrink: 0; flex-shrink: 0;">',
             escapeHtml(l.comment || ''),
             '  </div>',
