@@ -188,12 +188,6 @@ function persistPlayers() {
   }, 150);
 }
 
-function persistAll() {
-  persistSongs();
-  persistPlayback();
-  persistPlayers();
-}
-
 // Initial write if files do not exist yet (e.g. migration from state.json or fresh start)
 if (!fs.existsSync(SONGS_FILE)) persistSongs();
 if (!fs.existsSync(PLAYBACK_FILE)) persistPlayback();

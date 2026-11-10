@@ -2542,13 +2542,13 @@ function ImportExport({ songs, onImport }) {
             setSelectedFileName('');
             if (fileInputRef.current) fileInputRef.current.value = '';
           }}
-          className={'px-3 py-1 rounded-lg font-medium transition-colors ' + (
+          className={`px-3 py-1 rounded-lg font-medium transition-colors ${
             importFormat === 'json'
               ? 'bg-amber-500 text-black font-bold'
               : isDark
               ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
               : 'bg-zinc-200 text-zinc-700'
-          )}
+          }`}
         >
           JSON Datei-Import
         </button>
@@ -2559,13 +2559,13 @@ function ImportExport({ songs, onImport }) {
             setSelectedFileName('');
             if (fileInputRef.current) fileInputRef.current.value = '';
           }}
-          className={'px-3 py-1 rounded-lg font-medium transition-colors ' + (
+          className={`px-3 py-1 rounded-lg font-medium transition-colors ${
             importFormat === 'plaintext'
               ? 'bg-amber-500 text-black font-bold'
               : isDark
               ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
               : 'bg-zinc-200 text-zinc-700'
-          )}
+          }`}
         >
           Klartext Datei-Import (.txt)
         </button>
@@ -2604,7 +2604,7 @@ function ImportExport({ songs, onImport }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept={importFormat === 'plaintext' ? '.txt,text/plain' : 'application/json'}
+          accept={importFormat === 'plaintext' ? ".txt,text/plain" : "application/json"}
           onChange={onFileSelect}
           className="text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-white hover:file:bg-zinc-700 cursor-pointer"
           style={{ color: COLORS.inkDim }}
