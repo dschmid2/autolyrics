@@ -227,8 +227,31 @@ function broadcast(msg, exceptWs) {
   });
 }
 
+// Keepalive heartbeat every 15 seconds to prevent mobile / NAT / firewall timeouts
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach((client) => {
+    if (client.isAlive === false) {
+      return client.terminate();
+    }
+    client.isAlive = false;
+    try { client.ping(); } catch (e) {}
+    try {
+      if (client.readyState === 1) {
+        client.send(JSON.stringify({ type: 'ping' }));
+      }
+    } catch (e) {}
+  });
+}, 15000);
+
+wss.on('close', () => clearInterval(heartbeatInterval));
+
 wss.on('connection', (ws) => {
   let boundPlayerId = null;
+  ws.isAlive = true;
+
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
 
   ws.send(JSON.stringify({
     type: 'state',
@@ -240,8 +263,24 @@ wss.on('connection', (ws) => {
   }));
 
   ws.on('message', (raw) => {
+    ws.isAlive = true;
     let msg;
     try { msg = JSON.parse(raw); } catch (e) { return; }
+
+    if (msg.type === 'ping') {
+      try { ws.send(JSON.stringify({ type: 'pong' })); } catch (e) {}
+      if (boundPlayerId && state.players[boundPlayerId]) {
+        state.players[boundPlayerId].lastSeen = Date.now();
+      }
+      return;
+    }
+
+    if (msg.type === 'pong') {
+      if (boundPlayerId && state.players[boundPlayerId]) {
+        state.players[boundPlayerId].lastSeen = Date.now();
+      }
+      return;
+    }
 
     if (msg.type === 'registerPlayer' && msg.playerId) {
       boundPlayerId = msg.playerId;
