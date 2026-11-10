@@ -1,8 +1,53 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Play, Pause, Square, SkipBack, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Trash2, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Tablet, Sliders, MonitorPlay, Tv, Eye, QrCode } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from 'react';
+import { Play, Pause, Square, SkipBack, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Trash2, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Tablet, Sliders, MonitorPlay, Tv, Eye, QrCode, Sun, Moon } from 'lucide-react';
 import versionData from './version.json';
 
-const COLORS = {
+const THEME_PALETTES = {
+  light: {
+    panelBg: '#F4EFE4',
+    panelBg2: '#E9E1CE',
+    cardBg: '#FFFFFF',
+    inputBg: '#FFFFFF',
+    ink: '#221F1A',
+    inkDim: '#6B6558',
+    amber: '#D89A3E',
+    line: '#D8CFBB',
+    danger: '#B5453A',
+    stageBg: '#0A0A0D',
+    stageText: '#F4EFE4',
+    stageTextDim: '#9AA0AE',
+  },
+  dark: {
+    panelBg: '#121215',
+    panelBg2: '#1C1C22',
+    cardBg: '#18181F',
+    inputBg: '#24242D',
+    ink: '#EDEAE4',
+    inkDim: '#9AA0AE',
+    amber: '#D89A3E',
+    line: '#2E2E38',
+    danger: '#E05A4C',
+    stageBg: '#0A0A0D',
+    stageText: '#F4EFE4',
+    stageTextDim: '#9AA0AE',
+  },
+};
+
+const ThemeContext = createContext({
+  theme: 'light',
+  isDark: false,
+  toggleTheme: () => {},
+  setTheme: () => {},
+  colors: THEME_PALETTES.light,
+});
+
+function useTheme() {
+  return useContext(ThemeContext);
+}
+
+// Global fallback for any un-contexted reference
+const COLORS = THEME_PALETTES.light;
+const LEGACY_COLORS = {
   stageBg: '#0A0A0D',
   stageText: '#F4EFE4',
   stageTextDim: '#9AA0AE',
@@ -361,13 +406,17 @@ function WaveformCanvas({ audioBuffer, pxPerSec, bpm, timeSigNum, duration, widt
   return <canvas ref={canvasRef} style={{ width: `${width}px`, height: `${height}px`, display: 'block' }} />;
 }
 
-function WaveformEditor({ song, computedLines, onUpdateSong }) {
+function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChange, seekRef, playback, sendPlayback }) {
   const { audioBuffer, loading, error } = useAudioBuffer(song.audioUrl);
   const audioRef = useRef(null);
   const containerRef = useRef(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const isPlayingRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const currentTimeRef = useRef(0);
+  const [sendToScreens, setSendToScreens] = useState(false);
+  const sendToScreensRef = useRef(false);
   const [pxPerSec, setPxPerSec] = useState(40);
   const [isDragging, setIsDragging] = useState(false);
   const [markerDragMode, setMarkerDragMode] = useState('single');
@@ -385,34 +434,46 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
   useEffect(() => {
     let animId;
     const update = () => {
+      if (!isPlayingRef.current) return;
       const now = Date.now();
       const delta = (now - lastTickRef.current) / 1000;
       lastTickRef.current = now;
 
-      if (isPlaying) {
-        setCurrentTime((prev) => {
-          const nextSongTime = Math.max(0, prev + delta);
-          const targetAudioTime = nextSongTime - audioOffset;
+      setCurrentTime((prev) => {
+        if (!isPlayingRef.current) return prev;
+        const nextSongTime = Math.max(0, prev + delta);
+        const targetAudioTime = nextSongTime - audioOffset;
 
-          if (audioRef.current && audioBuffer) {
-            if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
-              if (audioRef.current.paused) {
+        if (audioRef.current && audioBuffer) {
+          if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
+            if (audioRef.current.paused && isPlayingRef.current) {
+              audioRef.current.currentTime = targetAudioTime;
+              audioRef.current.play().catch(() => {});
+            } else if (!audioRef.current.paused) {
+              const diff = Math.abs(audioRef.current.currentTime - targetAudioTime);
+              if (diff > 0.15) {
                 audioRef.current.currentTime = targetAudioTime;
-                audioRef.current.play().catch(() => {});
-              } else {
-                const diff = Math.abs(audioRef.current.currentTime - targetAudioTime);
-                if (diff > 0.15) {
-                  audioRef.current.currentTime = targetAudioTime;
-                }
-              }
-            } else {
-              if (!audioRef.current.paused) {
-                audioRef.current.pause();
               }
             }
+          } else {
+            if (!audioRef.current.paused) {
+              audioRef.current.pause();
+            }
           }
-          return nextSongTime;
-        });
+        }
+
+        if (containerRef.current && !isDragging) {
+          const container = containerRef.current;
+          const headX = nextSongTime * pxPerSec;
+          const targetScrollLeft = headX - container.clientWidth / 2;
+          container.scrollLeft = Math.max(0, targetScrollLeft);
+        }
+
+        currentTimeRef.current = nextSongTime;
+        return nextSongTime;
+      });
+
+      if (isPlayingRef.current) {
         animId = requestAnimationFrame(update);
       }
     };
@@ -423,34 +484,97 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isPlaying, audioOffset, audioBuffer, audioDuration]);
+  }, [isPlaying, audioOffset, audioBuffer, audioDuration, isDragging, pxPerSec]);
 
-  const togglePlay = () => {
-    if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      const targetAudioTime = currentTime - audioOffset;
-      if (audioBuffer && targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
-        audioRef.current.currentTime = targetAudioTime;
-        audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+  // Keep latest refs for callbacks to avoid stale closures
+  const playbackRef = useRef(playback);
+  useEffect(() => { playbackRef.current = playback; }, [playback]);
+  const songRef = useRef(song);
+  useEffect(() => { songRef.current = song; }, [song]);
+
+  const syncScreens = useCallback((status, timeSec) => {
+    if (!sendToScreensRef.current || !sendPlayback) return;
+    const elapsed = timeSec !== undefined ? timeSec : currentTimeRef.current;
+    sendPlayback({
+      ...(playbackRef.current || {}),
+      songId: songRef.current.id,
+      status,
+      anchorElapsed: Math.max(0, elapsed),
+      anchorEpoch: Date.now(),
+    });
+  }, [sendPlayback]);
+
+  useEffect(() => {
+    return () => {
+      // If sendToScreens was active when component unmounts, stop screens
+      if (sendToScreensRef.current && sendPlayback && playbackRef.current) {
+        sendPlayback({
+          ...playbackRef.current,
+          songId: songRef.current.id,
+          status: 'stopped',
+          anchorElapsed: 0,
+          anchorEpoch: Date.now(),
+        });
+      }
+    };
+  }, [sendPlayback]);
+
+  const toggleSendToScreens = () => {
+    const nextVal = !sendToScreens;
+    setSendToScreens(nextVal);
+    sendToScreensRef.current = nextVal;
+    if (sendPlayback) {
+      if (nextVal) {
+        syncScreens(isPlayingRef.current ? 'playing' : 'paused', currentTimeRef.current);
       } else {
-        setIsPlaying(true);
+        sendPlayback({
+          ...(playbackRef.current || {}),
+          songId: songRef.current.id,
+          status: 'stopped',
+          anchorElapsed: 0,
+          anchorEpoch: Date.now(),
+        });
       }
     }
   };
 
-  const stopAudio = () => {
-    if (audioRef.current) audioRef.current.pause();
-    setIsPlaying(false);
-    setCurrentTime(0);
+  const togglePlay = () => {
+    if (isPlayingRef.current) {
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      syncScreens('paused', currentTimeRef.current);
+    } else {
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+      const targetAudioTime = currentTime - audioOffset;
+      if (audioRef.current && audioBuffer && targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
+        audioRef.current.currentTime = targetAudioTime;
+        audioRef.current.play().catch(() => {});
+      }
+      syncScreens('playing', currentTimeRef.current);
+    }
   };
 
-  const seekNudge = (delta) => {
-    const newSongTime = Math.max(0, Math.min(totalDuration, currentTime + delta));
-    setCurrentTime(newSongTime);
-    const targetAudioTime = newSongTime - audioOffset;
+  const stopAudio = () => {
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    if (audioRef.current) audioRef.current.pause();
+    setCurrentTime(0);
+    currentTimeRef.current = 0;
+    if (containerRef.current) {
+      containerRef.current.scrollLeft = 0;
+    }
+    syncScreens('stopped', 0);
+  };
+
+  const seekToTime = useCallback((timeSec) => {
+    const clampedTime = Math.max(0, Math.min(totalDuration, timeSec));
+    setCurrentTime(clampedTime);
+    currentTimeRef.current = clampedTime;
+    const targetAudioTime = clampedTime - audioOffset;
     if (audioRef.current && audioBuffer) {
       if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
         audioRef.current.currentTime = targetAudioTime;
@@ -458,6 +582,22 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
         audioRef.current.pause();
       }
     }
+    if (containerRef.current) {
+      const container = containerRef.current;
+      const headX = clampedTime * pxPerSec;
+      container.scrollLeft = Math.max(0, headX - container.clientWidth / 2);
+    }
+    syncScreens(isPlayingRef.current ? 'playing' : 'paused', clampedTime);
+  }, [totalDuration, audioOffset, audioBuffer, audioDuration, pxPerSec, syncScreens]);
+
+  useEffect(() => {
+    if (seekRef) {
+      seekRef.current = seekToTime;
+    }
+  }, [seekRef, seekToTime]);
+
+  const seekNudge = (delta) => {
+    seekToTime(currentTime + delta);
   };
 
   const addMarkerAtCurrentTime = () => {
@@ -491,6 +631,17 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
   const activeIdx = currentIndex(computedLines, currentTime);
   const activeLine = activeIdx >= 0 ? computedLines[activeIdx] : null;
 
+  useEffect(() => {
+    if (onPlaybackStateChange) {
+      onPlaybackStateChange({
+        isPlaying,
+        currentTime,
+        activeIdx,
+        activeLineId: activeLine ? activeLine.id : null,
+      });
+    }
+  }, [onPlaybackStateChange, isPlaying, currentTime, activeIdx, activeLine]);
+
   const handleContainerClick = (e) => {
     if (isDragging) return;
     const container = containerRef.current;
@@ -498,15 +649,7 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
     const rect = container.getBoundingClientRect();
     const x = e.clientX - rect.left + container.scrollLeft;
     const seekTime = Math.max(0, Math.min(totalDuration, x / pxPerSec));
-    setCurrentTime(seekTime);
-    const targetAudioTime = seekTime - audioOffset;
-    if (audioRef.current && audioBuffer) {
-      if (targetAudioTime >= 0 && targetAudioTime <= audioDuration) {
-        audioRef.current.currentTime = targetAudioTime;
-      } else {
-        audioRef.current.pause();
-      }
-    }
+    seekToTime(seekTime);
   };
 
   const handleAudioOffsetPointerDown = (e) => {
@@ -596,9 +739,11 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
       <audio
         ref={audioRef}
         src={song.audioUrl}
-        onEnded={() => setIsPlaying(false)}
-        onPause={() => setIsPlaying(false)}
-        onPlay={() => setIsPlaying(true)}
+        onEnded={() => {
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+          syncScreens('stopped', 0);
+        }}
       />
 
       {/* Top Banner: Preview & Live Clock */}
@@ -702,6 +847,19 @@ function WaveformEditor({ song, computedLines, onUpdateSong }) {
               Dieser &amp; folgende
             </button>
           </div>
+
+          <button
+            onClick={toggleSendToScreens}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors border ${
+              sendToScreens
+                ? 'bg-amber-500 text-black border-amber-400 font-semibold shadow-sm'
+                : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white hover:bg-zinc-700'
+            }`}
+            title="Texte während des MP3-Playbacks live an Stage- und Projection-Screens senden"
+          >
+            <Tv size={14} className={sendToScreens ? 'text-black' : 'text-zinc-400'} />
+            <span>Send to screens</span>
+          </button>
         </div>
 
         {/* Zoom Controls */}
@@ -1053,6 +1211,7 @@ function useSongCompleted(lines, playback) {
 // --- Views ------------------------------------------------------------------
 
 function OptionsView({ playback, onChangePlayback }) {
+  const { colors: COLORS, theme, setTheme } = useTheme();
   const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
   const translationPercent = playback.translationPercent !== undefined ? playback.translationPercent : 60;
   const translationSpacing = playback.translationSpacing !== undefined ? playback.translationSpacing : 24;
@@ -1069,11 +1228,47 @@ function OptionsView({ playback, onChangePlayback }) {
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
       <div className="max-w-[1200px] w-full mx-auto p-4 md:px-8 space-y-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Anzeige-Optionen</h1>
-          <p className="text-xs" style={{ color: COLORS.inkDim }}>
-            Einstellungen für Projektion (Live-View) und Bühnenanzeige (Stageview).
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Anzeige-Optionen</h1>
+            <p className="text-xs" style={{ color: COLORS.inkDim }}>
+              Einstellungen für Projektion (Live-View), Bühnenanzeige (Stageview) und Darstellung.
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 p-1 rounded-xl border self-start sm:self-auto" style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}>
+            <button
+              type="button"
+              onClick={() => setTheme('light')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                theme === 'light'
+                  ? 'bg-amber text-zinc-950 font-bold shadow-sm'
+                  : 'hover:opacity-100 opacity-80'
+              }`}
+              style={{
+                background: theme === 'light' ? COLORS.amber : 'transparent',
+                color: theme === 'light' ? '#241a08' : COLORS.ink,
+              }}
+            >
+              <Sun size={14} />
+              <span>Hell</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme('dark')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                theme === 'dark'
+                  ? 'bg-amber text-zinc-950 font-bold shadow-sm'
+                  : 'hover:opacity-100 opacity-80'
+              }`}
+              style={{
+                background: theme === 'dark' ? COLORS.amber : 'transparent',
+                color: theme === 'dark' ? '#241a08' : COLORS.ink,
+              }}
+            >
+              <Moon size={14} />
+              <span>Dunkel</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -1553,11 +1748,11 @@ function StageView({ songs, playback, onExit }) {
                       minHeight: `${lineRowHeight}px`,
                       gridTemplateColumns: `${commentPercent}% 1fr`
                     }}
-                    className={`grid items-center w-full shrink-0 py-2 transition-opacity duration-500 ${
+                    className={`grid items-start w-full shrink-0 py-2 transition-opacity duration-500 ${
                       !isVisible ? 'opacity-0 pointer-events-none' : ''
                     }`}
                   >
-                    {/* Left Column: Comment (Right-aligned, wraps without truncation, uniform bold font weight) */}
+                    {/* Left Column: Comment (Right-aligned, wraps without truncation, uniform bold font weight, top-aligned) */}
                     <div
                       style={{
                         color: isCurrent ? COLORS.amber : COLORS.stageTextDim,
@@ -1734,6 +1929,7 @@ function ProjectionView({ songs, playback, onExit, connected }) {
 }
 
 function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePlayer }) {
+  const { colors: COLORS, isDark } = useTheme();
   const playerList = Object.values(players);
 
   return (
@@ -1761,7 +1957,7 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                 Aktuell sind keine Player verbunden.
               </div>
               <div className="text-xs max-w-md mx-auto" style={{ color: COLORS.inkDim }}>
-                Öffne auf einem anderen Gerät die URL <code className="font-mono px-1 py-0.5 rounded bg-black/5 font-semibold">/player</code>, um das Gerät automatisch hier registrieren zu lassen.
+                Öffne auf einem anderen Gerät die URL <code className="font-mono px-1 py-0.5 rounded font-semibold" style={{ background: COLORS.line, color: COLORS.ink }}>/player</code>, um das Gerät automatisch hier registrieren zu lassen.
               </div>
             </div>
           ) : (
@@ -1769,7 +1965,11 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
               {playerList.map((p) => {
                 const isSelf = p.id === localPlayerId;
                 return (
-                  <div key={p.id} className="p-3.5 rounded-lg bg-white shadow-sm space-y-3 border border-black/5">
+                  <div
+                    key={p.id}
+                    className="p-3.5 rounded-lg shadow-sm space-y-3 border"
+                    style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span
@@ -1780,14 +1980,14 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                           {p.id}
                         </span>
                         {isSelf && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400">
                             Dieses Gerät
                           </span>
                         )}
                       </div>
                       <button
                         onClick={() => onDeletePlayer(p.id)}
-                        className="p-1.5 rounded hover:bg-red-50 text-red-600 transition-colors"
+                        className="p-1.5 rounded hover:bg-red-500/10 text-red-500 transition-colors"
                         title="Player entfernen"
                       >
                         <Trash2 size={15} />
@@ -1804,6 +2004,8 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                           className={`px-3 py-1 rounded text-xs font-medium transition-all ${
                             p.role === 'live'
                               ? 'bg-amber-500 text-black font-bold shadow-sm'
+                              : isDark
+                              ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                               : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
                           }`}
                         >
@@ -1814,6 +2016,8 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                           className={`px-3 py-1 rounded text-xs font-medium transition-all ${
                             p.role === 'stage'
                               ? 'bg-amber-500 text-black font-bold shadow-sm'
+                              : isDark
+                              ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                               : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
                           }`}
                         >
@@ -1823,7 +2027,9 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                           onClick={() => onSetPlayerRole(p.id, null)}
                           className={`px-3 py-1 rounded text-xs font-medium transition-all ${
                             !p.role
-                              ? 'bg-zinc-800 text-white font-bold'
+                              ? 'bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold'
+                              : isDark
+                              ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                               : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
                           }`}
                         >
@@ -1843,6 +2049,7 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
 }
 
 function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, playersCount = 0 }) {
+  const { colors: COLORS, isDark, toggleTheme } = useTheme();
   const navItems = [
     { id: 'control', label: 'Steuerung', icon: MonitorPlay },
     { id: 'editor', label: 'Song-Editor', icon: Music },
@@ -1873,7 +2080,7 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
                   className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap shrink-0 transition-all ${
                     isActive
                       ? 'shadow-sm font-semibold'
-                      : 'hover:bg-black/5 opacity-80 hover:opacity-100'
+                      : 'hover:opacity-100 opacity-80'
                   }`}
                   style={{
                     background: isActive ? COLORS.amber : 'transparent',
@@ -1891,8 +2098,21 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
           </nav>
         </div>
 
-        {/* Right: Quick actions for Live & Stage View */}
+        {/* Right: Quick actions for Theme Toggle, Live & Stage View */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-2">
+          <button
+            onClick={toggleTheme}
+            className="flex items-center justify-center p-2 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90 border"
+            style={{
+              background: COLORS.panelBg2,
+              borderColor: COLORS.line,
+              color: COLORS.ink,
+            }}
+            title={isDark ? 'Heller Modus aktivieren' : 'Dunkler Modus (Dark Mode) aktivieren'}
+            aria-label={isDark ? 'Heller Modus' : 'Dunkler Modus'}
+          >
+            {isDark ? <Sun size={15} className="text-amber-400" /> : <Moon size={15} style={{ color: COLORS.ink }} />}
+          </button>
           <button
             onClick={onGotoProjection}
             className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
@@ -1928,6 +2148,7 @@ function ControlView({
   onNudge,
   onPlayFromLine,
 }) {
+  const { colors: COLORS, isDark } = useTheme();
   const song = useMemo(() => songs.find((s) => s.id === playback.songId) || null, [songs, playback.songId]);
   const lines = useMemo(() => (song ? sortedLines(song) : []), [song]);
   const idx = song ? currentIndex(lines, elapsed) : -1;
@@ -1964,7 +2185,7 @@ function ControlView({
                   Aktueller Song
                 </span>
                 {song && (
-                  <span className="text-xs font-mono px-2 py-0.5 rounded font-semibold bg-white/70" style={{ color: COLORS.ink }}>
+                  <span className="text-xs font-mono px-2 py-0.5 rounded font-semibold" style={{ background: COLORS.cardBg, color: COLORS.ink }}>
                     {song.bpm} BPM
                   </span>
                 )}
@@ -1980,8 +2201,8 @@ function ControlView({
                 onClick={() => onNudge(-5)}
                 disabled={!song}
                 aria-label="5 Sekunden zurück"
-                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
-                style={{ background: '#fff' }}
+                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
+                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
                 title="5 Sekunden zurück (Schnellvorlauf)"
               >
                 <Rewind size={16} className="sm:w-4 sm:h-4" color={COLORS.ink} />
@@ -1992,8 +2213,8 @@ function ControlView({
                 onClick={() => onNudge(-1)}
                 disabled={!song}
                 aria-label="1 Sekunde zurück"
-                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
-                style={{ background: '#fff' }}
+                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
+                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
                 title="1 Sekunde zurück"
               >
                 <ChevronLeft size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
@@ -2019,8 +2240,8 @@ function ControlView({
                 onClick={() => onNudge(1)}
                 disabled={!song}
                 aria-label="1 Sekunde vor"
-                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
-                style={{ background: '#fff' }}
+                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
+                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
                 title="1 Sekunde vor"
               >
                 <ChevronRight size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
@@ -2031,8 +2252,8 @@ function ControlView({
                 onClick={() => onNudge(5)}
                 disabled={!song}
                 aria-label="5 Sekunden vor"
-                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
-                style={{ background: '#fff' }}
+                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
+                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
                 title="5 Sekunden vor (Schnellvorlauf)"
               >
                 <FastForward size={16} className="sm:w-4 sm:h-4" color={COLORS.ink} />
@@ -2042,8 +2263,8 @@ function ControlView({
               <button
                 onClick={onStop}
                 disabled={!song}
-                className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition hover:bg-black/10 active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
-                style={{ background: '#fff', color: COLORS.inkDim }}
+                className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition hover:opacity-80 active:scale-95 disabled:opacity-30 disabled:pointer-events-none border"
+                style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.inkDim }}
                 title="Stoppt die Wiedergabe und schaltet die Projektion schwarz"
               >
                 <Square size={13} />
@@ -2075,14 +2296,14 @@ function ControlView({
 
           {/* Current Live Line Preview Banner */}
           {song && (
-            <div className="rounded-xl p-4 shadow-inner" style={{ background: COLORS.ink }}>
+            <div className="rounded-xl p-4 shadow-inner" style={{ background: isDark ? '#0A0A0D' : COLORS.ink }}>
               <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
                 <span className="text-xs uppercase tracking-wider font-semibold opacity-70" style={{ color: COLORS.line }}>
                   {playback.status === 'playing' ? 'Aktuelle Zeile (Live)' : 'Status'}
                 </span>
                 <div
                   className="font-mono text-sm sm:text-base font-bold px-3 py-1 rounded-lg shadow-sm flex items-center gap-2"
-                  style={{ background: COLORS.panelBg, color: COLORS.ink }}
+                  style={{ background: isDark ? '#1C1C22' : COLORS.panelBg, color: COLORS.ink }}
                 >
                   <span>{fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}</span>
                   <span className="opacity-30">·</span>
@@ -2119,10 +2340,10 @@ function ControlView({
                   <button
                     key={s.id}
                     onClick={() => onLoad(s)}
-                    className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all ${
+                    className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all border ${
                       isSelected
-                        ? 'shadow-md font-bold'
-                        : 'hover:bg-black/5 opacity-85 hover:opacity-100'
+                        ? 'shadow-md font-bold border-amber-500/50'
+                        : 'opacity-85 hover:opacity-100 border-transparent hover:border-black/5 dark:hover:border-white/5'
                     }`}
                     style={{
                       background: isSelected ? COLORS.amber : COLORS.panelBg2,
@@ -2165,8 +2386,8 @@ function ControlView({
               </div>
             ) : (
               <div
-                className="max-h-[calc(100vh-22rem)] overflow-y-auto rounded-2xl p-2 space-y-1.5 shadow-sm border border-black/5"
-                style={{ background: COLORS.panelBg2 }}
+                className="max-h-[calc(100vh-22rem)] overflow-y-auto rounded-2xl p-2 space-y-1.5 shadow-sm border"
+                style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}
               >
                 {lines.map((l, i) => {
                   const isActive = i === idx;
@@ -2175,17 +2396,17 @@ function ControlView({
                       key={l.id}
                       ref={isActive ? activeLineRef : null}
                       onClick={() => handleLineClick(l.t)}
-                      className={`w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all ${
+                      className={`w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all border ${
                         isActive
-                          ? 'shadow-md scale-[1.01]'
-                          : 'hover:bg-white/60'
+                          ? 'shadow-md scale-[1.01] border-amber-500/50'
+                          : 'border-transparent hover:opacity-90'
                       }`}
                       style={{
-                        background: isActive ? COLORS.amber : '#fff',
+                        background: isActive ? COLORS.amber : COLORS.cardBg,
                         color: isActive ? '#241a08' : COLORS.ink,
                       }}
                     >
-                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70 bg-black/5">
+                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70" style={{ background: COLORS.line, color: COLORS.ink }}>
                         {fmtTime(l.t)}
                       </span>
 
@@ -2195,12 +2416,12 @@ function ControlView({
                             {l.en}
                           </span>
                           {l.comment && (
-                            <span className="text-xs font-normal px-1.5 py-0.2 rounded bg-black/10 opacity-75">
+                            <span className="text-xs font-normal px-1.5 py-0.2 rounded opacity-75" style={{ background: COLORS.line, color: COLORS.ink }}>
                               [{l.comment}]
                             </span>
                           )}
                           {l.stageOnly && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-100 text-red-700">
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-500/20 text-red-600 dark:text-red-400">
                               Nur Stage
                             </span>
                           )}
@@ -2213,7 +2434,8 @@ function ControlView({
                       </div>
 
                       <span
-                        className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70 bg-black/5 whitespace-nowrap self-start"
+                        className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70 whitespace-nowrap self-start"
+                        style={{ background: COLORS.line, color: COLORS.ink }}
                         title={`Takt ${l.bar}/${l.beat}`}
                       >
                         Takt {l.bar}/{l.beat}
@@ -2232,6 +2454,7 @@ function ControlView({
 }
 
 function ImportExport({ songs, onImport }) {
+  const { colors: COLORS, isDark } = useTheme();
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState('replace');
@@ -2278,22 +2501,34 @@ function ImportExport({ songs, onImport }) {
   };
 
   return (
-    <div className="space-y-3 pt-4 mt-4 border-t" style={{ borderColor: COLORS.panelBg2 }}>
+    <div className="space-y-3 pt-4 mt-4 border-t" style={{ borderColor: COLORS.line }}>
       <div className="text-xs uppercase tracking-wide font-bold" style={{ color: COLORS.inkDim }}>Import / Export</div>
-      <button onClick={doCopy} className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>
+      <button onClick={doCopy} className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1 border" style={{ background: COLORS.panelBg2, borderColor: COLORS.line, color: COLORS.ink }}>
         {copied ? <Check size={12} /> : <Copy size={12} />} Alle Songs als JSON kopieren
       </button>
 
       <div className="flex gap-2 border-b pb-2 text-xs" style={{ borderColor: COLORS.line }}>
         <button
           onClick={() => setImportFormat('json')}
-          className={`px-3 py-1 rounded-lg font-medium transition-colors ${importFormat === 'json' ? 'bg-amber-500 text-black font-bold' : 'bg-zinc-200 text-zinc-700'}`}
+          className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+            importFormat === 'json'
+              ? 'bg-amber-500 text-black font-bold'
+              : isDark
+              ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+              : 'bg-zinc-200 text-zinc-700'
+          }`}
         >
           JSON Import
         </button>
         <button
           onClick={() => setImportFormat('plaintext')}
-          className={`px-3 py-1 rounded-lg font-medium transition-colors ${importFormat === 'plaintext' ? 'bg-amber-500 text-black font-bold' : 'bg-zinc-200 text-zinc-700'}`}
+          className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+            importFormat === 'plaintext'
+              ? 'bg-amber-500 text-black font-bold'
+              : isDark
+              ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+              : 'bg-zinc-200 text-zinc-700'
+          }`}
         >
           Klartext Import (.txt)
         </button>
@@ -2306,8 +2541,8 @@ function ImportExport({ songs, onImport }) {
             value={songTitle}
             onChange={(e) => setSongTitle(e.target.value)}
             placeholder="Songtitel"
-            className="px-2 py-1.5 rounded-lg border bg-white"
-            style={{ color: COLORS.ink }}
+            className="px-2 py-1.5 rounded-lg border"
+            style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
           />
           <div className="flex items-center gap-1">
             <span style={{ color: COLORS.inkDim }}>BPM:</span>
@@ -2315,8 +2550,8 @@ function ImportExport({ songs, onImport }) {
               type="number"
               value={bpm}
               onChange={(e) => setBpm(e.target.value)}
-              className="w-20 px-2 py-1.5 rounded-lg border bg-white"
-              style={{ color: COLORS.ink }}
+              className="w-20 px-2 py-1.5 rounded-lg border"
+              style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
             />
           </div>
         </div>
@@ -2327,8 +2562,8 @@ function ImportExport({ songs, onImport }) {
         onChange={(e) => setText(e.target.value)}
         placeholder={importFormat === 'plaintext' ? "Klartext hier einfügen...\nJede Zeile entspricht einem Takt.\n*Zeile für Nur-Stageview\n[Solo] Zeile mit Kommentar" : "JSON hier einfügen zum Importieren…"}
         rows={5}
-        className="w-full text-xs rounded-lg p-2 font-mono"
-        style={{ background: COLORS.panelBg2, color: COLORS.ink }}
+        className="w-full text-xs rounded-lg p-2 font-mono border"
+        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
       />
       <div className="flex items-center gap-3 flex-wrap">
         <input type="file" accept={importFormat === 'plaintext' ? ".txt,text/plain" : "application/json"} onChange={onFile} className="text-xs" style={{ color: COLORS.inkDim }} />
@@ -2340,12 +2575,34 @@ function ImportExport({ songs, onImport }) {
   );
 }
 
-function SongEditor({ song, onChange, onDelete }) {
+function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
+  const { colors: COLORS, isDark } = useTheme();
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
+  const [waveformPlayback, setWaveformPlayback] = useState({ isPlaying: false, currentTime: 0, activeIdx: -1, activeLineId: null });
+  const waveformSeekRef = useRef(null);
+  const activeLineRowRef = useRef(null);
+
+  useEffect(() => {
+    if (waveformPlayback.isPlaying && activeLineRowRef.current) {
+      activeLineRowRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      });
+    }
+  }, [waveformPlayback.isPlaying, waveformPlayback.activeLineId]);
 
   const update = (patch) => onChange({ ...song, ...patch });
   const updateLine = (id, patch) => update({ lines: song.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
+
+  const jumpToLineMarker = (lineId) => {
+    if (waveformSeekRef.current) {
+      const computed = computedLines.find((cl) => cl.id === lineId);
+      if (computed && computed.t !== undefined) {
+        waveformSeekRef.current(computed.t);
+      }
+    }
+  };
 
   const handleBarChange = (lineId, newBarVal) => {
     const lineIndex = song.lines.findIndex((l) => l.id === lineId);
@@ -2494,21 +2751,21 @@ function SongEditor({ song, onChange, onDelete }) {
           value={song.title}
           onChange={(e) => update({ title: e.target.value })}
           placeholder="Songtitel"
-          className="flex-1 min-w-[150px] px-3 py-2 rounded-lg text-sm font-semibold"
-          style={{ background: COLORS.panelBg2, color: COLORS.ink }}
+          className="flex-1 min-w-[150px] px-3 py-2 rounded-lg text-sm font-semibold border"
+          style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
         />
-        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1" style={{ background: COLORS.panelBg2 }}>
+        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1 border" style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}>
           <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>BPM</span>
           <input
             type="number"
             value={song.bpm}
             onChange={(e) => update({ bpm: Number(e.target.value) || 1 })}
             placeholder="BPM"
-            className="w-16 px-1.5 py-1 rounded text-sm bg-white"
-            style={{ color: COLORS.ink }}
+            className="w-16 px-1.5 py-1 rounded text-sm border"
+            style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
           />
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1" style={{ background: COLORS.panelBg2 }}>
+        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1 border" style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}>
           <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>Taktart</span>
           <select
             value={`${song.timeSigNum || 4}/${song.timeSigDen || 4}`}
@@ -2516,8 +2773,8 @@ function SongEditor({ song, onChange, onDelete }) {
               const [num, den] = e.target.value.split('/');
               update({ timeSigNum: Number(num), timeSigDen: Number(den) });
             }}
-            className="px-1.5 py-1 rounded text-sm bg-white cursor-pointer"
-            style={{ color: COLORS.ink }}
+            className="px-1.5 py-1 rounded text-sm cursor-pointer border"
+            style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
           >
             <option value="4/4">4/4</option>
             <option value="3/4">3/4</option>
@@ -2526,13 +2783,13 @@ function SongEditor({ song, onChange, onDelete }) {
             <option value="5/4">5/4</option>
           </select>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1" style={{ background: COLORS.panelBg2 }}>
+        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1 border" style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}>
           <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>Positionierung</span>
           <select
             value={currentTimingMode}
             onChange={(e) => handleTimingModeChange(e.target.value)}
-            className="px-1.5 py-1 rounded text-sm bg-white cursor-pointer"
-            style={{ color: COLORS.ink }}
+            className="px-1.5 py-1 rounded text-sm cursor-pointer border"
+            style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
           >
             <option value="bar_beat">Takt / Schlag</option>
             <option value="sec">Zeitbasis (Sekunden)</option>
@@ -2549,7 +2806,7 @@ function SongEditor({ song, onChange, onDelete }) {
       </div>
 
       {/* MP3 Audio Upload & Waveform Section */}
-      <div className="rounded-xl p-3 space-y-3" style={{ background: COLORS.panelBg2 }}>
+      <div className="rounded-xl p-3 space-y-3 border" style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}>
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Music size={18} style={{ color: COLORS.ink }} />
@@ -2557,7 +2814,7 @@ function SongEditor({ song, onChange, onDelete }) {
               MP3 Audio-Datei
             </span>
             {song.audioName && (
-              <span className="text-xs px-2 py-0.5 rounded bg-white font-mono truncate max-w-xs" style={{ color: COLORS.ink }}>
+              <span className="text-xs px-2 py-0.5 rounded font-mono truncate max-w-xs border" style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.ink }}>
                 {song.audioName}
               </span>
             )}
@@ -2593,7 +2850,15 @@ function SongEditor({ song, onChange, onDelete }) {
         </div>
 
         {song.audioUrl ? (
-          <WaveformEditor song={song} computedLines={computedLines} onUpdateSong={update} />
+          <WaveformEditor
+            song={song}
+            computedLines={computedLines}
+            onUpdateSong={update}
+            onPlaybackStateChange={setWaveformPlayback}
+            seekRef={waveformSeekRef}
+            playback={playback}
+            sendPlayback={sendPlayback}
+          />
         ) : (
           <div className="p-4 text-center border-2 border-dashed rounded-lg text-xs" style={{ borderColor: COLORS.line, color: COLORS.inkDim }}>
             Keine MP3-Datei verknüpft. Lade eine MP3 hoch, um die interaktive Wellenform mit Zeitstempel-Markern zu nutzen.
@@ -2601,120 +2866,252 @@ function SongEditor({ song, onChange, onDelete }) {
         )}
       </div>
 
-      {/* Lyric Line Textfields */}
+      {/* Lyric Line Textfields Header & Scroll Container */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <div className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.inkDim }}>
-            Songzeilen &amp; Marker-Zeitstempel
+            Songzeilen &amp; Marker-Zeitstempel ({song.lines.length})
           </div>
           {song.lines.length > 0 && (
             <button
               onClick={() => insertLine(-1)}
               title="Zeile ganz oben einfügen"
-              className="text-xs px-2 py-0.5 rounded flex items-center gap-1 font-medium bg-white hover:bg-black/5"
-              style={{ color: COLORS.ink }}
+              className="text-xs px-2 py-0.5 rounded flex items-center gap-1 font-medium border"
+              style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.ink }}
             >
               <Plus size={12} /> Am Anfang einfügen
             </button>
           )}
         </div>
-        {song.lines.map((l, idx) => {
-          const computedLine = computedLines.find((cl) => cl.id === l.id);
-          const t = computedLine ? computedLine.t : 0;
-          return (
-            <div key={l.id} className="rounded-lg p-2 space-y-1" style={{ background: COLORS.panelBg2 }}>
-              <div className="flex gap-2 items-center">
-                <input
-                  value={l.en}
-                  onChange={(e) => updateLine(l.id, { en: e.target.value })}
-                  placeholder="Englisch / Haupttext"
-                  className="flex-1 px-2 py-1 rounded text-sm"
-                  style={{ background: '#fff', color: COLORS.ink }}
-                />
-                <input
-                  value={l.comment || ''}
-                  onChange={(e) => updateLine(l.id, { comment: e.target.value })}
-                  placeholder="[Kommentar / Solo]"
-                  className="w-36 px-2 py-1 rounded text-xs border border-gray-200"
-                  style={{ background: '#fff', color: COLORS.ink }}
-                  title="Kommentar für Solosänger (wird im Stagedisplay links angezeigt)"
-                />
-                <label className="flex items-center gap-1 text-xs font-medium cursor-pointer whitespace-nowrap" style={{ color: COLORS.inkDim }} title="Nur im Stageview anzeigen (*), nie auf der Projektion">
+
+        <div className="max-h-[calc(100vh-28rem)] min-h-[160px] overflow-y-auto space-y-2 pr-1 rounded-xl">
+          {song.lines.map((l, idx) => {
+            const computedIdx = computedLines.findIndex((cl) => cl.id === l.id);
+            const computedLine = computedIdx >= 0 ? computedLines[computedIdx] : null;
+            const t = computedLine ? computedLine.t : 0;
+            const lineNum = computedIdx >= 0 ? computedIdx + 1 : idx + 1;
+            const isPlayingActive = waveformPlayback.isPlaying && waveformPlayback.activeLineId === l.id;
+            return (
+              <div
+                key={l.id}
+                ref={isPlayingActive ? activeLineRowRef : null}
+                onClick={() => jumpToLineMarker(l.id)}
+                className={`rounded-lg p-2 space-y-1 transition-all border ${
+                  isPlayingActive ? 'ring-2 ring-amber-500 shadow-md border-amber-500/50' : ''
+                }`}
+                style={{
+                  background: isPlayingActive ? (isDark ? '#423214' : '#FDE047') : COLORS.panelBg2,
+                  borderColor: isPlayingActive ? COLORS.amber : COLORS.line,
+                  color: COLORS.ink,
+                }}
+              >
+                <div className="flex gap-2 items-center">
+                  <span
+                    className={`font-mono text-xs font-bold px-2 py-1 rounded shrink-0 select-none ${
+                      isPlayingActive ? 'bg-amber-400 text-black shadow-sm' : ''
+                    }`}
+                    style={{
+                      background: isPlayingActive ? COLORS.amber : COLORS.line,
+                      color: isPlayingActive ? '#241a08' : COLORS.ink,
+                    }}
+                    title={`Marker #${lineNum}`}
+                  >
+                    #{lineNum}
+                  </span>
                   <input
-                    type="checkbox"
-                    checked={!!l.stageOnly}
-                    onChange={(e) => updateLine(l.id, { stageOnly: e.target.checked })}
-                    className="rounded accent-amber"
+                    value={l.en}
+                    onChange={(e) => updateLine(l.id, { en: e.target.value })}
+                    placeholder="Englisch / Haupttext"
+                    className="flex-1 px-2 py-1 rounded text-sm border"
+                    style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
                   />
-                  <span>Nur Stage (*)</span>
-                </label>
-              </div>
-              <input value={l.de || ''} onChange={(e) => updateLine(l.id, { de: e.target.value })} placeholder="Deutsch (Übersetzung)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
-              <div className="flex items-center gap-2 flex-wrap text-xs">
-                <select value={l.mode || currentTimingMode} onChange={(e) => updateLine(l.id, { mode: e.target.value })} className="px-1.5 py-1 rounded bg-white text-xs border border-gray-200" style={{ color: COLORS.ink }}>
-                  <option value="bar_beat">Takt / Schlag</option>
-                  <option value="sec">Absolut (Sekunden)</option>
-                  <option value="relative">Relativ (s seit letzter)</option>
-                  <option value="beat">Schlag absolut</option>
-                  <option value="relative_bar_beat">Relativ (Takt / Schlag)</option>
-                </select>
-
-                {l.mode === 'sec' && (
-                  <div className="flex items-center gap-1">
-                    <span style={{ color: COLORS.inkDim }}>s:</span>
-                    <input type="number" step="0.1" value={l.timeSec !== undefined && l.timeSec !== null ? l.timeSec : ''} onChange={(e) => updateLine(l.id, { timeSec: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                  </div>
-                )}
-
-                {l.mode === 'relative' && (
-                  <div className="flex items-center gap-1">
-                    <span style={{ color: COLORS.inkDim }}>+s:</span>
-                    <input type="number" step="0.1" value={l.relativeSec !== undefined && l.relativeSec !== null ? l.relativeSec : ''} onChange={(e) => updateLine(l.id, { relativeSec: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                  </div>
-                )}
-
-                {l.mode === 'relative_bar_beat' && (
-                  <div className="flex items-center gap-1">
-                    <span style={{ color: COLORS.inkDim }}>+Takt:</span>
-                    <input type="number" step="1" value={l.relativeBar !== undefined && l.relativeBar !== null ? l.relativeBar : ''} onChange={(e) => updateLine(l.id, { relativeBar: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                    <span style={{ color: COLORS.inkDim }}>+Schlag:</span>
-                    <input type="number" step="1" value={l.relativeBeat !== undefined && l.relativeBeat !== null ? l.relativeBeat : ''} onChange={(e) => updateLine(l.id, { relativeBeat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                  </div>
-                )}
-
-                {(l.mode === 'bar_beat' || !l.mode) && (
-                  <div className="flex items-center gap-1">
-                    <span style={{ color: COLORS.inkDim }}>Takt:</span>
-                    <input type="number" step="1" min="1" value={l.bar !== undefined && l.bar !== null ? l.bar : 1} onChange={(e) => handleBarChange(l.id, e.target.value)} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                    <span style={{ color: COLORS.inkDim }}>Schlag:</span>
-                    <input type="number" step="1" min="1" max={song.timeSigNum || 4} value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                  </div>
-                )}
-
-                {l.mode === 'beat' && (
-                  <div className="flex items-center gap-1">
-                    <span style={{ color: COLORS.inkDim }}>Schlag:</span>
-                    <input type="number" step="1" min="1" value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
-                  </div>
-                )}
-
-                <div className="flex items-center gap-1">
-                  <span style={{ color: COLORS.inkDim }} title="Anzeigedauer in Sekunden">Dauer (s):</span>
-                  <input type="number" step="0.1" min="0" placeholder="∞" value={l.duration !== undefined && l.duration !== null ? l.duration : ''} onChange={(e) => updateLine(l.id, { duration: e.target.value })} className="w-14 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                  <input
+                    value={l.comment || ''}
+                    onChange={(e) => updateLine(l.id, { comment: e.target.value })}
+                    placeholder="[Kommentar / Solo]"
+                    className="w-36 px-2 py-1 rounded text-xs border"
+                    style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                    title="Kommentar für Solosänger (wird im Stagedisplay links angezeigt)"
+                  />
+                  <label className="flex items-center gap-1 text-xs font-medium cursor-pointer whitespace-nowrap" style={{ color: COLORS.inkDim }} title="Nur im Stageview anzeigen (*), nie auf der Projektion">
+                    <input
+                      type="checkbox"
+                      checked={!!l.stageOnly}
+                      onChange={(e) => updateLine(l.id, { stageOnly: e.target.checked })}
+                      className="rounded accent-amber"
+                    />
+                    <span>Nur Stage (*)</span>
+                  </label>
                 </div>
+                <input
+                  value={l.de || ''}
+                  onChange={(e) => updateLine(l.id, { de: e.target.value })}
+                  placeholder="Deutsch (Übersetzung)"
+                  className="w-full px-2 py-1 rounded text-sm border"
+                  style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                />
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  <select
+                    value={l.mode || currentTimingMode}
+                    onChange={(e) => updateLine(l.id, { mode: e.target.value })}
+                    className="px-1.5 py-1 rounded text-xs border"
+                    style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                  >
+                    <option value="bar_beat">Takt / Schlag</option>
+                    <option value="sec">Absolut (Sekunden)</option>
+                    <option value="relative">Relativ (s seit letzter)</option>
+                    <option value="beat">Schlag absolut</option>
+                    <option value="relative_bar_beat">Relativ (Takt / Schlag)</option>
+                  </select>
 
-                <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>≈ {fmtTime(t)}</span>
+                  {l.mode === 'sec' && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: COLORS.inkDim }}>s:</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={l.timeSec !== undefined && l.timeSec !== null ? l.timeSec : ''}
+                        onChange={(e) => updateLine(l.id, { timeSec: e.target.value })}
+                        className="w-16 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
+                    </div>
+                  )}
 
-                <div className="flex gap-1 ml-auto">
-                  <button onClick={() => insertLine(idx)} title="Zeile danach einfügen" aria-label="Zeile danach einfügen" className="p-1 rounded hover:bg-black/10 bg-white"><Plus size={14} /></button>
-                  <button onClick={() => moveLine(l.id, -1)} aria-label="Zeile nach oben" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronUp size={14} /></button>
-                  <button onClick={() => moveLine(l.id, 1)} aria-label="Zeile nach unten" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronDown size={14} /></button>
-                  <button onClick={() => removeLine(l.id)} aria-label="Zeile löschen" className="p-1 rounded hover:bg-black/10 bg-white"><Trash2 size={14} color={COLORS.danger} /></button>
+                  {l.mode === 'relative' && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: COLORS.inkDim }}>+s:</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={l.relativeSec !== undefined && l.relativeSec !== null ? l.relativeSec : ''}
+                        onChange={(e) => updateLine(l.id, { relativeSec: e.target.value })}
+                        className="w-16 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
+                    </div>
+                  )}
+
+                  {l.mode === 'relative_bar_beat' && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: COLORS.inkDim }}>+Takt:</span>
+                      <input
+                        type="number"
+                        step="1"
+                        value={l.relativeBar !== undefined && l.relativeBar !== null ? l.relativeBar : ''}
+                        onChange={(e) => updateLine(l.id, { relativeBar: e.target.value })}
+                        className="w-12 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
+                      <span style={{ color: COLORS.inkDim }}>+Schlag:</span>
+                      <input
+                        type="number"
+                        step="1"
+                        value={l.relativeBeat !== undefined && l.relativeBeat !== null ? l.relativeBeat : ''}
+                        onChange={(e) => updateLine(l.id, { relativeBeat: e.target.value })}
+                        className="w-12 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
+                    </div>
+                  )}
+
+                  {(l.mode === 'bar_beat' || !l.mode) && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: COLORS.inkDim }}>Takt:</span>
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        value={l.bar !== undefined && l.bar !== null ? l.bar : 1}
+                        onChange={(e) => handleBarChange(l.id, e.target.value)}
+                        className="w-12 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
+                      <span style={{ color: COLORS.inkDim }}>Schlag:</span>
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        max={song.timeSigNum || 4}
+                        value={l.beat !== undefined && l.beat !== null ? l.beat : 1}
+                        onChange={(e) => updateLine(l.id, { beat: e.target.value })}
+                        className="w-12 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
+                    </div>
+                  )}
+
+                  {l.mode === 'beat' && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: COLORS.inkDim }}>Schlag:</span>
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        value={l.beat !== undefined && l.beat !== null ? l.beat : 1}
+                        onChange={(e) => updateLine(l.id, { beat: e.target.value })}
+                        className="w-16 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-1">
+                    <span style={{ color: COLORS.inkDim }} title="Anzeigedauer in Sekunden">Dauer (s):</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="∞"
+                      value={l.duration !== undefined && l.duration !== null ? l.duration : ''}
+                      onChange={(e) => updateLine(l.id, { duration: e.target.value })}
+                      className="w-14 px-1.5 py-1 rounded border"
+                      style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                    />
+                  </div>
+
+                  <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>≈ {fmtTime(t)}</span>
+
+                  <div className="flex gap-1 ml-auto">
+                    <button
+                      onClick={() => insertLine(idx)}
+                      title="Zeile danach einfügen"
+                      aria-label="Zeile danach einfügen"
+                      className="p-1 rounded hover:opacity-80 border"
+                      style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.ink }}
+                    >
+                      <Plus size={14} />
+                    </button>
+                    <button
+                      onClick={() => moveLine(l.id, -1)}
+                      aria-label="Zeile nach oben"
+                      className="p-1 rounded hover:opacity-80 border"
+                      style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.ink }}
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      onClick={() => moveLine(l.id, 1)}
+                      aria-label="Zeile nach unten"
+                      className="p-1 rounded hover:opacity-80 border"
+                      style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.ink }}
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                    <button
+                      onClick={() => removeLine(l.id)}
+                      aria-label="Zeile löschen"
+                      className="p-1 rounded hover:opacity-80 border"
+                      style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
+                    >
+                      <Trash2 size={14} color={COLORS.danger} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
       <div className="flex gap-2">
         <button onClick={addLine} className="flex-1 text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1" style={{ background: COLORS.amber, color: '#241a08' }}>
@@ -2739,7 +3136,8 @@ function SongEditor({ song, onChange, onDelete }) {
   );
 }
 
-function EditorView({ songs, onChangeSongs }) {
+function EditorView({ songs, onChangeSongs, playback, sendPlayback }) {
+  const { colors: COLORS, isDark } = useTheme();
   const [selectedId, setSelectedId] = useState(songs[0] ? songs[0].id : null);
   const selected = songs.find((s) => s.id === selectedId) || null;
 
@@ -2777,8 +3175,11 @@ function EditorView({ songs, onChangeSongs }) {
             {songs.map((s, index) => (
               <div
                 key={s.id}
-                className="flex items-center gap-1 w-full rounded-lg pr-1"
-                style={{ background: s.id === selectedId ? COLORS.amber : COLORS.panelBg2 }}
+                className="flex items-center gap-1 w-full rounded-lg pr-1 border"
+                style={{
+                  background: s.id === selectedId ? COLORS.amber : COLORS.panelBg2,
+                  borderColor: s.id === selectedId ? 'transparent' : COLORS.line,
+                }}
               >
                 <button
                   onClick={() => setSelectedId(s.id)}
@@ -2811,7 +3212,17 @@ function EditorView({ songs, onChangeSongs }) {
             <button onClick={addSong} className="w-full text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}><Plus size={14} /> Neuer Song</button>
           </div>
           <div className="flex-1 min-w-0">
-            {selected ? <SongEditor song={selected} onChange={updateSong} onDelete={() => deleteSong(selected.id)} /> : <div className="text-sm" style={{ color: COLORS.inkDim }}>Song auswählen oder neu erstellen.</div>}
+            {selected ? (
+              <SongEditor
+                song={selected}
+                onChange={updateSong}
+                onDelete={() => deleteSong(selected.id)}
+                playback={playback}
+                sendPlayback={sendPlayback}
+              />
+            ) : (
+              <div className="text-sm" style={{ color: COLORS.inkDim }}>Song auswählen oder neu erstellen.</div>
+            )}
             <ImportExport songs={songs} onImport={onChangeSongs} />
           </div>
         </div>
@@ -2821,6 +3232,32 @@ function EditorView({ songs, onChangeSongs }) {
 }
 
 export default function App() {
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('autolyrics_theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+    } catch (e) {}
+    return 'light';
+  });
+
+  const isDark = theme === 'dark';
+  const colors = THEME_PALETTES[theme] || THEME_PALETTES.light;
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('autolyrics_theme', theme);
+    } catch (e) {}
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
   const [view, setView] = useState(() => {
     const path = window.location.pathname;
     if (path === '/live') return 'projection';
@@ -2893,13 +3330,13 @@ export default function App() {
   };
 
   return (
-    <>
+    <ThemeContext.Provider value={{ theme, isDark, toggleTheme, setTheme, colors }}>
       <ConnectionBadge connected={connected} />
       <style>{`
         .choir-beat-dot { animation-name: choirBeatPulse; animation-timing-function: ease-in-out; animation-iteration-count: infinite; }
         @keyframes choirBeatPulse { 0% { transform: scale(1); opacity: .15; } 15% { transform: scale(1.8); opacity: .55; } 100% { transform: scale(1); opacity: .15; } }
         @media (prefers-reduced-motion: reduce) { .choir-beat-dot { animation: none; opacity: .3; } }
-        button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid ${COLORS.amber}; outline-offset: 2px; }
+        button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid ${colors.amber}; outline-offset: 2px; }
       `}</style>
       {view === 'player' ? (
         localPlayer && localPlayer.role === 'live' ? (
@@ -2914,7 +3351,7 @@ export default function App() {
       ) : view === 'stage' ? (
         <StageView songs={songs} playback={playback} onExit={() => changeView('control')} />
       ) : (
-        <div className="min-h-screen" style={{ background: COLORS.panelBg }}>
+        <div className="min-h-screen" style={{ background: colors.panelBg }}>
           <TopMenuBar
             activeView={view}
             onNavigate={(next) => setView(next)}
@@ -2923,7 +3360,12 @@ export default function App() {
             playersCount={Object.keys(players).length}
           />
           {view === 'editor' ? (
-            <EditorView songs={songs} onChangeSongs={sendSongs} />
+            <EditorView
+              songs={songs}
+              onChangeSongs={sendSongs}
+              playback={playback}
+              sendPlayback={sendPlayback}
+            />
           ) : view === 'options' ? (
             <OptionsView playback={playback} onChangePlayback={(patch) => sendPlayback({ ...playback, ...patch })} />
           ) : view === 'players' ? (
@@ -2948,6 +3390,6 @@ export default function App() {
           )}
         </div>
       )}
-    </>
+    </ThemeContext.Provider>
   );
 }
