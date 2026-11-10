@@ -1,8 +1,53 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Play, Pause, Square, SkipBack, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Trash2, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Tablet, Sliders, MonitorPlay, Tv, Eye, QrCode } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from 'react';
+import { Play, Pause, Square, SkipBack, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Trash2, Maximize2, X, Settings2, Copy, Check, WifiOff, Upload, ZoomIn, ZoomOut, Music, Clock, Tablet, Sliders, MonitorPlay, Tv, Eye, QrCode, Sun, Moon } from 'lucide-react';
 import versionData from './version.json';
 
-const COLORS = {
+const THEME_PALETTES = {
+  light: {
+    panelBg: '#F4EFE4',
+    panelBg2: '#E9E1CE',
+    cardBg: '#FFFFFF',
+    inputBg: '#FFFFFF',
+    ink: '#221F1A',
+    inkDim: '#6B6558',
+    amber: '#D89A3E',
+    line: '#D8CFBB',
+    danger: '#B5453A',
+    stageBg: '#0A0A0D',
+    stageText: '#F4EFE4',
+    stageTextDim: '#9AA0AE',
+  },
+  dark: {
+    panelBg: '#121215',
+    panelBg2: '#1C1C22',
+    cardBg: '#18181F',
+    inputBg: '#24242D',
+    ink: '#EDEAE4',
+    inkDim: '#9AA0AE',
+    amber: '#D89A3E',
+    line: '#2E2E38',
+    danger: '#E05A4C',
+    stageBg: '#0A0A0D',
+    stageText: '#F4EFE4',
+    stageTextDim: '#9AA0AE',
+  },
+};
+
+const ThemeContext = createContext({
+  theme: 'light',
+  isDark: false,
+  toggleTheme: () => {},
+  setTheme: () => {},
+  colors: THEME_PALETTES.light,
+});
+
+function useTheme() {
+  return useContext(ThemeContext);
+}
+
+// Global fallback for any un-contexted reference
+const COLORS = THEME_PALETTES.light;
+const LEGACY_COLORS = {
   stageBg: '#0A0A0D',
   stageText: '#F4EFE4',
   stageTextDim: '#9AA0AE',
@@ -1114,6 +1159,7 @@ function useSongCompleted(lines, playback) {
 // --- Views ------------------------------------------------------------------
 
 function OptionsView({ playback, onChangePlayback }) {
+  const { colors: COLORS, theme, setTheme } = useTheme();
   const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
   const translationPercent = playback.translationPercent !== undefined ? playback.translationPercent : 60;
   const translationSpacing = playback.translationSpacing !== undefined ? playback.translationSpacing : 24;
@@ -1130,11 +1176,47 @@ function OptionsView({ playback, onChangePlayback }) {
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
       <div className="max-w-[1200px] w-full mx-auto p-4 md:px-8 space-y-6">
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Anzeige-Optionen</h1>
-          <p className="text-xs" style={{ color: COLORS.inkDim }}>
-            Einstellungen für Projektion (Live-View) und Bühnenanzeige (Stageview).
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold" style={{ color: COLORS.ink }}>Anzeige-Optionen</h1>
+            <p className="text-xs" style={{ color: COLORS.inkDim }}>
+              Einstellungen für Projektion (Live-View), Bühnenanzeige (Stageview) und Darstellung.
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 p-1 rounded-xl border self-start sm:self-auto" style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}>
+            <button
+              type="button"
+              onClick={() => setTheme('light')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                theme === 'light'
+                  ? 'bg-amber text-zinc-950 font-bold shadow-sm'
+                  : 'hover:opacity-100 opacity-80'
+              }`}
+              style={{
+                background: theme === 'light' ? COLORS.amber : 'transparent',
+                color: theme === 'light' ? '#241a08' : COLORS.ink,
+              }}
+            >
+              <Sun size={14} />
+              <span>Hell</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme('dark')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                theme === 'dark'
+                  ? 'bg-amber text-zinc-950 font-bold shadow-sm'
+                  : 'hover:opacity-100 opacity-80'
+              }`}
+              style={{
+                background: theme === 'dark' ? COLORS.amber : 'transparent',
+                color: theme === 'dark' ? '#241a08' : COLORS.ink,
+              }}
+            >
+              <Moon size={14} />
+              <span>Dunkel</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -1754,6 +1836,7 @@ function ProjectionView({ songs, playback, onExit, connected }) {
 }
 
 function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePlayer }) {
+  const { colors: COLORS, isDark } = useTheme();
   const playerList = Object.values(players);
 
   return (
@@ -1781,7 +1864,7 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                 Aktuell sind keine Player verbunden.
               </div>
               <div className="text-xs max-w-md mx-auto" style={{ color: COLORS.inkDim }}>
-                Öffne auf einem anderen Gerät die URL <code className="font-mono px-1 py-0.5 rounded bg-black/5 font-semibold">/player</code>, um das Gerät automatisch hier registrieren zu lassen.
+                Öffne auf einem anderen Gerät die URL <code className="font-mono px-1 py-0.5 rounded font-semibold" style={{ background: COLORS.line, color: COLORS.ink }}>/player</code>, um das Gerät automatisch hier registrieren zu lassen.
               </div>
             </div>
           ) : (
@@ -1789,7 +1872,11 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
               {playerList.map((p) => {
                 const isSelf = p.id === localPlayerId;
                 return (
-                  <div key={p.id} className="p-3.5 rounded-lg bg-white shadow-sm space-y-3 border border-black/5">
+                  <div
+                    key={p.id}
+                    className="p-3.5 rounded-lg shadow-sm space-y-3 border"
+                    style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span
@@ -1800,14 +1887,14 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                           {p.id}
                         </span>
                         {isSelf && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400">
                             Dieses Gerät
                           </span>
                         )}
                       </div>
                       <button
                         onClick={() => onDeletePlayer(p.id)}
-                        className="p-1.5 rounded hover:bg-red-50 text-red-600 transition-colors"
+                        className="p-1.5 rounded hover:bg-red-500/10 text-red-500 transition-colors"
                         title="Player entfernen"
                       >
                         <Trash2 size={15} />
@@ -1824,6 +1911,8 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                           className={`px-3 py-1 rounded text-xs font-medium transition-all ${
                             p.role === 'live'
                               ? 'bg-amber-500 text-black font-bold shadow-sm'
+                              : isDark
+                              ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                               : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
                           }`}
                         >
@@ -1834,6 +1923,8 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                           className={`px-3 py-1 rounded text-xs font-medium transition-all ${
                             p.role === 'stage'
                               ? 'bg-amber-500 text-black font-bold shadow-sm'
+                              : isDark
+                              ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                               : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
                           }`}
                         >
@@ -1843,7 +1934,9 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                           onClick={() => onSetPlayerRole(p.id, null)}
                           className={`px-3 py-1 rounded text-xs font-medium transition-all ${
                             !p.role
-                              ? 'bg-zinc-800 text-white font-bold'
+                              ? 'bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold'
+                              : isDark
+                              ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                               : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
                           }`}
                         >
@@ -1863,6 +1956,7 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
 }
 
 function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, playersCount = 0 }) {
+  const { colors: COLORS, isDark, toggleTheme } = useTheme();
   const navItems = [
     { id: 'control', label: 'Steuerung', icon: MonitorPlay },
     { id: 'editor', label: 'Song-Editor', icon: Music },
@@ -1893,7 +1987,7 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
                   className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap shrink-0 transition-all ${
                     isActive
                       ? 'shadow-sm font-semibold'
-                      : 'hover:bg-black/5 opacity-80 hover:opacity-100'
+                      : 'hover:opacity-100 opacity-80'
                   }`}
                   style={{
                     background: isActive ? COLORS.amber : 'transparent',
@@ -1911,8 +2005,21 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
           </nav>
         </div>
 
-        {/* Right: Quick actions for Live & Stage View */}
+        {/* Right: Quick actions for Theme Toggle, Live & Stage View */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-2">
+          <button
+            onClick={toggleTheme}
+            className="flex items-center justify-center p-2 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90 border"
+            style={{
+              background: COLORS.panelBg2,
+              borderColor: COLORS.line,
+              color: COLORS.ink,
+            }}
+            title={isDark ? 'Heller Modus aktivieren' : 'Dunkler Modus (Dark Mode) aktivieren'}
+            aria-label={isDark ? 'Heller Modus' : 'Dunkler Modus'}
+          >
+            {isDark ? <Sun size={15} className="text-amber-400" /> : <Moon size={15} style={{ color: COLORS.ink }} />}
+          </button>
           <button
             onClick={onGotoProjection}
             className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
@@ -1948,6 +2055,7 @@ function ControlView({
   onNudge,
   onPlayFromLine,
 }) {
+  const { colors: COLORS, isDark } = useTheme();
   const song = useMemo(() => songs.find((s) => s.id === playback.songId) || null, [songs, playback.songId]);
   const lines = useMemo(() => (song ? sortedLines(song) : []), [song]);
   const idx = song ? currentIndex(lines, elapsed) : -1;
@@ -1984,7 +2092,7 @@ function ControlView({
                   Aktueller Song
                 </span>
                 {song && (
-                  <span className="text-xs font-mono px-2 py-0.5 rounded font-semibold bg-white/70" style={{ color: COLORS.ink }}>
+                  <span className="text-xs font-mono px-2 py-0.5 rounded font-semibold" style={{ background: COLORS.cardBg, color: COLORS.ink }}>
                     {song.bpm} BPM
                   </span>
                 )}
@@ -2000,8 +2108,8 @@ function ControlView({
                 onClick={() => onNudge(-5)}
                 disabled={!song}
                 aria-label="5 Sekunden zurück"
-                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
-                style={{ background: '#fff' }}
+                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
+                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
                 title="5 Sekunden zurück (Schnellvorlauf)"
               >
                 <Rewind size={16} className="sm:w-4 sm:h-4" color={COLORS.ink} />
@@ -2012,8 +2120,8 @@ function ControlView({
                 onClick={() => onNudge(-1)}
                 disabled={!song}
                 aria-label="1 Sekunde zurück"
-                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
-                style={{ background: '#fff' }}
+                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
+                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
                 title="1 Sekunde zurück"
               >
                 <ChevronLeft size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
@@ -2039,8 +2147,8 @@ function ControlView({
                 onClick={() => onNudge(1)}
                 disabled={!song}
                 aria-label="1 Sekunde vor"
-                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
-                style={{ background: '#fff' }}
+                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
+                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
                 title="1 Sekunde vor"
               >
                 <ChevronRight size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
@@ -2051,8 +2159,8 @@ function ControlView({
                 onClick={() => onNudge(5)}
                 disabled={!song}
                 aria-label="5 Sekunden vor"
-                className="p-2 sm:p-2.5 rounded-full hover:bg-black/10 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem]"
-                style={{ background: '#fff' }}
+                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
+                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
                 title="5 Sekunden vor (Schnellvorlauf)"
               >
                 <FastForward size={16} className="sm:w-4 sm:h-4" color={COLORS.ink} />
@@ -2062,8 +2170,8 @@ function ControlView({
               <button
                 onClick={onStop}
                 disabled={!song}
-                className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition hover:bg-black/10 active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
-                style={{ background: '#fff', color: COLORS.inkDim }}
+                className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition hover:opacity-80 active:scale-95 disabled:opacity-30 disabled:pointer-events-none border"
+                style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.inkDim }}
                 title="Stoppt die Wiedergabe und schaltet die Projektion schwarz"
               >
                 <Square size={13} />
@@ -2095,14 +2203,14 @@ function ControlView({
 
           {/* Current Live Line Preview Banner */}
           {song && (
-            <div className="rounded-xl p-4 shadow-inner" style={{ background: COLORS.ink }}>
+            <div className="rounded-xl p-4 shadow-inner" style={{ background: isDark ? '#0A0A0D' : COLORS.ink }}>
               <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
                 <span className="text-xs uppercase tracking-wider font-semibold opacity-70" style={{ color: COLORS.line }}>
                   {playback.status === 'playing' ? 'Aktuelle Zeile (Live)' : 'Status'}
                 </span>
                 <div
                   className="font-mono text-sm sm:text-base font-bold px-3 py-1 rounded-lg shadow-sm flex items-center gap-2"
-                  style={{ background: COLORS.panelBg, color: COLORS.ink }}
+                  style={{ background: isDark ? '#1C1C22' : COLORS.panelBg, color: COLORS.ink }}
                 >
                   <span>{fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}</span>
                   <span className="opacity-30">·</span>
@@ -2139,10 +2247,10 @@ function ControlView({
                   <button
                     key={s.id}
                     onClick={() => onLoad(s)}
-                    className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all ${
+                    className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all border ${
                       isSelected
-                        ? 'shadow-md font-bold'
-                        : 'hover:bg-black/5 opacity-85 hover:opacity-100'
+                        ? 'shadow-md font-bold border-amber-500/50'
+                        : 'opacity-85 hover:opacity-100 border-transparent hover:border-black/5 dark:hover:border-white/5'
                     }`}
                     style={{
                       background: isSelected ? COLORS.amber : COLORS.panelBg2,
@@ -2185,8 +2293,8 @@ function ControlView({
               </div>
             ) : (
               <div
-                className="max-h-[calc(100vh-22rem)] overflow-y-auto rounded-2xl p-2 space-y-1.5 shadow-sm border border-black/5"
-                style={{ background: COLORS.panelBg2 }}
+                className="max-h-[calc(100vh-22rem)] overflow-y-auto rounded-2xl p-2 space-y-1.5 shadow-sm border"
+                style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}
               >
                 {lines.map((l, i) => {
                   const isActive = i === idx;
@@ -2195,17 +2303,17 @@ function ControlView({
                       key={l.id}
                       ref={isActive ? activeLineRef : null}
                       onClick={() => handleLineClick(l.t)}
-                      className={`w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all ${
+                      className={`w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all border ${
                         isActive
-                          ? 'shadow-md scale-[1.01]'
-                          : 'hover:bg-white/60'
+                          ? 'shadow-md scale-[1.01] border-amber-500/50'
+                          : 'border-transparent hover:opacity-90'
                       }`}
                       style={{
-                        background: isActive ? COLORS.amber : '#fff',
+                        background: isActive ? COLORS.amber : COLORS.cardBg,
                         color: isActive ? '#241a08' : COLORS.ink,
                       }}
                     >
-                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70 bg-black/5">
+                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70" style={{ background: COLORS.line, color: COLORS.ink }}>
                         {fmtTime(l.t)}
                       </span>
 
@@ -2215,12 +2323,12 @@ function ControlView({
                             {l.en}
                           </span>
                           {l.comment && (
-                            <span className="text-xs font-normal px-1.5 py-0.2 rounded bg-black/10 opacity-75">
+                            <span className="text-xs font-normal px-1.5 py-0.2 rounded opacity-75" style={{ background: COLORS.line, color: COLORS.ink }}>
                               [{l.comment}]
                             </span>
                           )}
                           {l.stageOnly && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-100 text-red-700">
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-500/20 text-red-600 dark:text-red-400">
                               Nur Stage
                             </span>
                           )}
@@ -2233,7 +2341,8 @@ function ControlView({
                       </div>
 
                       <span
-                        className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70 bg-black/5 whitespace-nowrap self-start"
+                        className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70 whitespace-nowrap self-start"
+                        style={{ background: COLORS.line, color: COLORS.ink }}
                         title={`Takt ${l.bar}/${l.beat}`}
                       >
                         Takt {l.bar}/{l.beat}
@@ -2252,6 +2361,7 @@ function ControlView({
 }
 
 function ImportExport({ songs, onImport }) {
+  const { colors: COLORS, isDark } = useTheme();
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState('replace');
@@ -2298,22 +2408,34 @@ function ImportExport({ songs, onImport }) {
   };
 
   return (
-    <div className="space-y-3 pt-4 mt-4 border-t" style={{ borderColor: COLORS.panelBg2 }}>
+    <div className="space-y-3 pt-4 mt-4 border-t" style={{ borderColor: COLORS.line }}>
       <div className="text-xs uppercase tracking-wide font-bold" style={{ color: COLORS.inkDim }}>Import / Export</div>
-      <button onClick={doCopy} className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1" style={{ background: COLORS.panelBg2, color: COLORS.ink }}>
+      <button onClick={doCopy} className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1 border" style={{ background: COLORS.panelBg2, borderColor: COLORS.line, color: COLORS.ink }}>
         {copied ? <Check size={12} /> : <Copy size={12} />} Alle Songs als JSON kopieren
       </button>
 
       <div className="flex gap-2 border-b pb-2 text-xs" style={{ borderColor: COLORS.line }}>
         <button
           onClick={() => setImportFormat('json')}
-          className={`px-3 py-1 rounded-lg font-medium transition-colors ${importFormat === 'json' ? 'bg-amber-500 text-black font-bold' : 'bg-zinc-200 text-zinc-700'}`}
+          className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+            importFormat === 'json'
+              ? 'bg-amber-500 text-black font-bold'
+              : isDark
+              ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+              : 'bg-zinc-200 text-zinc-700'
+          }`}
         >
           JSON Import
         </button>
         <button
           onClick={() => setImportFormat('plaintext')}
-          className={`px-3 py-1 rounded-lg font-medium transition-colors ${importFormat === 'plaintext' ? 'bg-amber-500 text-black font-bold' : 'bg-zinc-200 text-zinc-700'}`}
+          className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+            importFormat === 'plaintext'
+              ? 'bg-amber-500 text-black font-bold'
+              : isDark
+              ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+              : 'bg-zinc-200 text-zinc-700'
+          }`}
         >
           Klartext Import (.txt)
         </button>
@@ -2326,8 +2448,8 @@ function ImportExport({ songs, onImport }) {
             value={songTitle}
             onChange={(e) => setSongTitle(e.target.value)}
             placeholder="Songtitel"
-            className="px-2 py-1.5 rounded-lg border bg-white"
-            style={{ color: COLORS.ink }}
+            className="px-2 py-1.5 rounded-lg border"
+            style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
           />
           <div className="flex items-center gap-1">
             <span style={{ color: COLORS.inkDim }}>BPM:</span>
@@ -2335,8 +2457,8 @@ function ImportExport({ songs, onImport }) {
               type="number"
               value={bpm}
               onChange={(e) => setBpm(e.target.value)}
-              className="w-20 px-2 py-1.5 rounded-lg border bg-white"
-              style={{ color: COLORS.ink }}
+              className="w-20 px-2 py-1.5 rounded-lg border"
+              style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
             />
           </div>
         </div>
@@ -2347,8 +2469,8 @@ function ImportExport({ songs, onImport }) {
         onChange={(e) => setText(e.target.value)}
         placeholder={importFormat === 'plaintext' ? "Klartext hier einfügen...\nJede Zeile entspricht einem Takt.\n*Zeile für Nur-Stageview\n[Solo] Zeile mit Kommentar" : "JSON hier einfügen zum Importieren…"}
         rows={5}
-        className="w-full text-xs rounded-lg p-2 font-mono"
-        style={{ background: COLORS.panelBg2, color: COLORS.ink }}
+        className="w-full text-xs rounded-lg p-2 font-mono border"
+        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
       />
       <div className="flex items-center gap-3 flex-wrap">
         <input type="file" accept={importFormat === 'plaintext' ? ".txt,text/plain" : "application/json"} onChange={onFile} className="text-xs" style={{ color: COLORS.inkDim }} />
@@ -2361,6 +2483,7 @@ function ImportExport({ songs, onImport }) {
 }
 
 function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
+  const { colors: COLORS, isDark } = useTheme();
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [waveformPlayback, setWaveformPlayback] = useState({ isPlaying: false, currentTime: 0, activeIdx: -1, activeLineId: null });
@@ -2535,21 +2658,21 @@ function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
           value={song.title}
           onChange={(e) => update({ title: e.target.value })}
           placeholder="Songtitel"
-          className="flex-1 min-w-[150px] px-3 py-2 rounded-lg text-sm font-semibold"
-          style={{ background: COLORS.panelBg2, color: COLORS.ink }}
+          className="flex-1 min-w-[150px] px-3 py-2 rounded-lg text-sm font-semibold border"
+          style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
         />
-        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1" style={{ background: COLORS.panelBg2 }}>
+        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1 border" style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}>
           <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>BPM</span>
           <input
             type="number"
             value={song.bpm}
             onChange={(e) => update({ bpm: Number(e.target.value) || 1 })}
             placeholder="BPM"
-            className="w-16 px-1.5 py-1 rounded text-sm bg-white"
-            style={{ color: COLORS.ink }}
+            className="w-16 px-1.5 py-1 rounded text-sm border"
+            style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
           />
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1" style={{ background: COLORS.panelBg2 }}>
+        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1 border" style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}>
           <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>Taktart</span>
           <select
             value={`${song.timeSigNum || 4}/${song.timeSigDen || 4}`}
@@ -2557,8 +2680,8 @@ function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
               const [num, den] = e.target.value.split('/');
               update({ timeSigNum: Number(num), timeSigDen: Number(den) });
             }}
-            className="px-1.5 py-1 rounded text-sm bg-white cursor-pointer"
-            style={{ color: COLORS.ink }}
+            className="px-1.5 py-1 rounded text-sm cursor-pointer border"
+            style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
           >
             <option value="4/4">4/4</option>
             <option value="3/4">3/4</option>
@@ -2567,13 +2690,13 @@ function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
             <option value="5/4">5/4</option>
           </select>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1" style={{ background: COLORS.panelBg2 }}>
+        <div className="flex items-center gap-1.5 shrink-0 rounded-lg p-1 border" style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}>
           <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>Positionierung</span>
           <select
             value={currentTimingMode}
             onChange={(e) => handleTimingModeChange(e.target.value)}
-            className="px-1.5 py-1 rounded text-sm bg-white cursor-pointer"
-            style={{ color: COLORS.ink }}
+            className="px-1.5 py-1 rounded text-sm cursor-pointer border"
+            style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
           >
             <option value="bar_beat">Takt / Schlag</option>
             <option value="sec">Zeitbasis (Sekunden)</option>
@@ -2590,7 +2713,7 @@ function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
       </div>
 
       {/* MP3 Audio Upload & Waveform Section */}
-      <div className="rounded-xl p-3 space-y-3" style={{ background: COLORS.panelBg2 }}>
+      <div className="rounded-xl p-3 space-y-3 border" style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}>
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Music size={18} style={{ color: COLORS.ink }} />
@@ -2598,7 +2721,7 @@ function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
               MP3 Audio-Datei
             </span>
             {song.audioName && (
-              <span className="text-xs px-2 py-0.5 rounded bg-white font-mono truncate max-w-xs" style={{ color: COLORS.ink }}>
+              <span className="text-xs px-2 py-0.5 rounded font-mono truncate max-w-xs border" style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.ink }}>
                 {song.audioName}
               </span>
             )}
@@ -2660,8 +2783,8 @@ function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
             <button
               onClick={() => insertLine(-1)}
               title="Zeile ganz oben einfügen"
-              className="text-xs px-2 py-0.5 rounded flex items-center gap-1 font-medium bg-white hover:bg-black/5"
-              style={{ color: COLORS.ink }}
+              className="text-xs px-2 py-0.5 rounded flex items-center gap-1 font-medium border"
+              style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.ink }}
             >
               <Plus size={12} /> Am Anfang einfügen
             </button>
@@ -2680,20 +2803,24 @@ function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
                 key={l.id}
                 ref={isPlayingActive ? activeLineRowRef : null}
                 onClick={() => jumpToLineMarker(l.id)}
-                className={`rounded-lg p-2 space-y-1 transition-all ${
-                  isPlayingActive ? 'ring-2 ring-amber-500 shadow-md' : ''
+                className={`rounded-lg p-2 space-y-1 transition-all border ${
+                  isPlayingActive ? 'ring-2 ring-amber-500 shadow-md border-amber-500/50' : ''
                 }`}
                 style={{
-                  background: isPlayingActive ? '#FDE047' : COLORS.panelBg2,
+                  background: isPlayingActive ? (isDark ? '#423214' : '#FDE047') : COLORS.panelBg2,
+                  borderColor: isPlayingActive ? COLORS.amber : COLORS.line,
                   color: COLORS.ink,
                 }}
               >
                 <div className="flex gap-2 items-center">
                   <span
                     className={`font-mono text-xs font-bold px-2 py-1 rounded shrink-0 select-none ${
-                      isPlayingActive ? 'bg-amber-400 text-black shadow-sm' : 'bg-black/5'
+                      isPlayingActive ? 'bg-amber-400 text-black shadow-sm' : ''
                     }`}
-                    style={{ color: isPlayingActive ? '#000' : COLORS.ink }}
+                    style={{
+                      background: isPlayingActive ? COLORS.amber : COLORS.line,
+                      color: isPlayingActive ? '#241a08' : COLORS.ink,
+                    }}
                     title={`Marker #${lineNum}`}
                   >
                     #{lineNum}
@@ -2702,15 +2829,15 @@ function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
                     value={l.en}
                     onChange={(e) => updateLine(l.id, { en: e.target.value })}
                     placeholder="Englisch / Haupttext"
-                    className="flex-1 px-2 py-1 rounded text-sm"
-                    style={{ background: '#fff', color: COLORS.ink }}
+                    className="flex-1 px-2 py-1 rounded text-sm border"
+                    style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
                   />
                   <input
                     value={l.comment || ''}
                     onChange={(e) => updateLine(l.id, { comment: e.target.value })}
                     placeholder="[Kommentar / Solo]"
-                    className="w-36 px-2 py-1 rounded text-xs border border-gray-200"
-                    style={{ background: '#fff', color: COLORS.ink }}
+                    className="w-36 px-2 py-1 rounded text-xs border"
+                    style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
                     title="Kommentar für Solosänger (wird im Stagedisplay links angezeigt)"
                   />
                   <label className="flex items-center gap-1 text-xs font-medium cursor-pointer whitespace-nowrap" style={{ color: COLORS.inkDim }} title="Nur im Stageview anzeigen (*), nie auf der Projektion">
@@ -2723,9 +2850,20 @@ function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
                     <span>Nur Stage (*)</span>
                   </label>
                 </div>
-                <input value={l.de || ''} onChange={(e) => updateLine(l.id, { de: e.target.value })} placeholder="Deutsch (Übersetzung)" className="w-full px-2 py-1 rounded text-sm" style={{ background: '#fff', color: COLORS.ink }} />
+                <input
+                  value={l.de || ''}
+                  onChange={(e) => updateLine(l.id, { de: e.target.value })}
+                  placeholder="Deutsch (Übersetzung)"
+                  className="w-full px-2 py-1 rounded text-sm border"
+                  style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                />
                 <div className="flex items-center gap-2 flex-wrap text-xs">
-                  <select value={l.mode || currentTimingMode} onChange={(e) => updateLine(l.id, { mode: e.target.value })} className="px-1.5 py-1 rounded bg-white text-xs border border-gray-200" style={{ color: COLORS.ink }}>
+                  <select
+                    value={l.mode || currentTimingMode}
+                    onChange={(e) => updateLine(l.id, { mode: e.target.value })}
+                    className="px-1.5 py-1 rounded text-xs border"
+                    style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                  >
                     <option value="bar_beat">Takt / Schlag</option>
                     <option value="sec">Absolut (Sekunden)</option>
                     <option value="relative">Relativ (s seit letzter)</option>
@@ -2736,54 +2874,145 @@ function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
                   {l.mode === 'sec' && (
                     <div className="flex items-center gap-1">
                       <span style={{ color: COLORS.inkDim }}>s:</span>
-                      <input type="number" step="0.1" value={l.timeSec !== undefined && l.timeSec !== null ? l.timeSec : ''} onChange={(e) => updateLine(l.id, { timeSec: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={l.timeSec !== undefined && l.timeSec !== null ? l.timeSec : ''}
+                        onChange={(e) => updateLine(l.id, { timeSec: e.target.value })}
+                        className="w-16 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
                     </div>
                   )}
 
                   {l.mode === 'relative' && (
                     <div className="flex items-center gap-1">
                       <span style={{ color: COLORS.inkDim }}>+s:</span>
-                      <input type="number" step="0.1" value={l.relativeSec !== undefined && l.relativeSec !== null ? l.relativeSec : ''} onChange={(e) => updateLine(l.id, { relativeSec: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={l.relativeSec !== undefined && l.relativeSec !== null ? l.relativeSec : ''}
+                        onChange={(e) => updateLine(l.id, { relativeSec: e.target.value })}
+                        className="w-16 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
                     </div>
                   )}
 
                   {l.mode === 'relative_bar_beat' && (
                     <div className="flex items-center gap-1">
                       <span style={{ color: COLORS.inkDim }}>+Takt:</span>
-                      <input type="number" step="1" value={l.relativeBar !== undefined && l.relativeBar !== null ? l.relativeBar : ''} onChange={(e) => updateLine(l.id, { relativeBar: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                      <input
+                        type="number"
+                        step="1"
+                        value={l.relativeBar !== undefined && l.relativeBar !== null ? l.relativeBar : ''}
+                        onChange={(e) => updateLine(l.id, { relativeBar: e.target.value })}
+                        className="w-12 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
                       <span style={{ color: COLORS.inkDim }}>+Schlag:</span>
-                      <input type="number" step="1" value={l.relativeBeat !== undefined && l.relativeBeat !== null ? l.relativeBeat : ''} onChange={(e) => updateLine(l.id, { relativeBeat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                      <input
+                        type="number"
+                        step="1"
+                        value={l.relativeBeat !== undefined && l.relativeBeat !== null ? l.relativeBeat : ''}
+                        onChange={(e) => updateLine(l.id, { relativeBeat: e.target.value })}
+                        className="w-12 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
                     </div>
                   )}
 
                   {(l.mode === 'bar_beat' || !l.mode) && (
                     <div className="flex items-center gap-1">
                       <span style={{ color: COLORS.inkDim }}>Takt:</span>
-                      <input type="number" step="1" min="1" value={l.bar !== undefined && l.bar !== null ? l.bar : 1} onChange={(e) => handleBarChange(l.id, e.target.value)} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        value={l.bar !== undefined && l.bar !== null ? l.bar : 1}
+                        onChange={(e) => handleBarChange(l.id, e.target.value)}
+                        className="w-12 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
                       <span style={{ color: COLORS.inkDim }}>Schlag:</span>
-                      <input type="number" step="1" min="1" max={song.timeSigNum || 4} value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-12 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        max={song.timeSigNum || 4}
+                        value={l.beat !== undefined && l.beat !== null ? l.beat : 1}
+                        onChange={(e) => updateLine(l.id, { beat: e.target.value })}
+                        className="w-12 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
                     </div>
                   )}
 
                   {l.mode === 'beat' && (
                     <div className="flex items-center gap-1">
                       <span style={{ color: COLORS.inkDim }}>Schlag:</span>
-                      <input type="number" step="1" min="1" value={l.beat !== undefined && l.beat !== null ? l.beat : 1} onChange={(e) => updateLine(l.id, { beat: e.target.value })} className="w-16 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        value={l.beat !== undefined && l.beat !== null ? l.beat : 1}
+                        onChange={(e) => updateLine(l.id, { beat: e.target.value })}
+                        className="w-16 px-1.5 py-1 rounded border"
+                        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                      />
                     </div>
                   )}
 
                   <div className="flex items-center gap-1">
                     <span style={{ color: COLORS.inkDim }} title="Anzeigedauer in Sekunden">Dauer (s):</span>
-                    <input type="number" step="0.1" min="0" placeholder="∞" value={l.duration !== undefined && l.duration !== null ? l.duration : ''} onChange={(e) => updateLine(l.id, { duration: e.target.value })} className="w-14 px-1.5 py-1 rounded bg-white border border-gray-200" />
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="∞"
+                      value={l.duration !== undefined && l.duration !== null ? l.duration : ''}
+                      onChange={(e) => updateLine(l.id, { duration: e.target.value })}
+                      className="w-14 px-1.5 py-1 rounded border"
+                      style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
+                    />
                   </div>
 
                   <span className="text-xs font-semibold px-1" style={{ color: COLORS.inkDim }}>≈ {fmtTime(t)}</span>
 
                   <div className="flex gap-1 ml-auto">
-                    <button onClick={() => insertLine(idx)} title="Zeile danach einfügen" aria-label="Zeile danach einfügen" className="p-1 rounded hover:bg-black/10 bg-white"><Plus size={14} /></button>
-                    <button onClick={() => moveLine(l.id, -1)} aria-label="Zeile nach oben" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronUp size={14} /></button>
-                    <button onClick={() => moveLine(l.id, 1)} aria-label="Zeile nach unten" className="p-1 rounded hover:bg-black/10 bg-white"><ChevronDown size={14} /></button>
-                    <button onClick={() => removeLine(l.id)} aria-label="Zeile löschen" className="p-1 rounded hover:bg-black/10 bg-white"><Trash2 size={14} color={COLORS.danger} /></button>
+                    <button
+                      onClick={() => insertLine(idx)}
+                      title="Zeile danach einfügen"
+                      aria-label="Zeile danach einfügen"
+                      className="p-1 rounded hover:opacity-80 border"
+                      style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.ink }}
+                    >
+                      <Plus size={14} />
+                    </button>
+                    <button
+                      onClick={() => moveLine(l.id, -1)}
+                      aria-label="Zeile nach oben"
+                      className="p-1 rounded hover:opacity-80 border"
+                      style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.ink }}
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      onClick={() => moveLine(l.id, 1)}
+                      aria-label="Zeile nach unten"
+                      className="p-1 rounded hover:opacity-80 border"
+                      style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.ink }}
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                    <button
+                      onClick={() => removeLine(l.id)}
+                      aria-label="Zeile löschen"
+                      className="p-1 rounded hover:opacity-80 border"
+                      style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
+                    >
+                      <Trash2 size={14} color={COLORS.danger} />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2815,6 +3044,7 @@ function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
 }
 
 function EditorView({ songs, onChangeSongs, playback, sendPlayback }) {
+  const { colors: COLORS, isDark } = useTheme();
   const [selectedId, setSelectedId] = useState(songs[0] ? songs[0].id : null);
   const selected = songs.find((s) => s.id === selectedId) || null;
 
@@ -2852,8 +3082,11 @@ function EditorView({ songs, onChangeSongs, playback, sendPlayback }) {
             {songs.map((s, index) => (
               <div
                 key={s.id}
-                className="flex items-center gap-1 w-full rounded-lg pr-1"
-                style={{ background: s.id === selectedId ? COLORS.amber : COLORS.panelBg2 }}
+                className="flex items-center gap-1 w-full rounded-lg pr-1 border"
+                style={{
+                  background: s.id === selectedId ? COLORS.amber : COLORS.panelBg2,
+                  borderColor: s.id === selectedId ? 'transparent' : COLORS.line,
+                }}
               >
                 <button
                   onClick={() => setSelectedId(s.id)}
@@ -2906,6 +3139,32 @@ function EditorView({ songs, onChangeSongs, playback, sendPlayback }) {
 }
 
 export default function App() {
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('autolyrics_theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+    } catch (e) {}
+    return 'light';
+  });
+
+  const isDark = theme === 'dark';
+  const colors = THEME_PALETTES[theme] || THEME_PALETTES.light;
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('autolyrics_theme', theme);
+    } catch (e) {}
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
   const [view, setView] = useState(() => {
     const path = window.location.pathname;
     if (path === '/live') return 'projection';
@@ -2978,13 +3237,13 @@ export default function App() {
   };
 
   return (
-    <>
+    <ThemeContext.Provider value={{ theme, isDark, toggleTheme, setTheme, colors }}>
       <ConnectionBadge connected={connected} />
       <style>{`
         .choir-beat-dot { animation-name: choirBeatPulse; animation-timing-function: ease-in-out; animation-iteration-count: infinite; }
         @keyframes choirBeatPulse { 0% { transform: scale(1); opacity: .15; } 15% { transform: scale(1.8); opacity: .55; } 100% { transform: scale(1); opacity: .15; } }
         @media (prefers-reduced-motion: reduce) { .choir-beat-dot { animation: none; opacity: .3; } }
-        button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid ${COLORS.amber}; outline-offset: 2px; }
+        button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid ${colors.amber}; outline-offset: 2px; }
       `}</style>
       {view === 'player' ? (
         localPlayer && localPlayer.role === 'live' ? (
@@ -2999,7 +3258,7 @@ export default function App() {
       ) : view === 'stage' ? (
         <StageView songs={songs} playback={playback} onExit={() => changeView('control')} />
       ) : (
-        <div className="min-h-screen" style={{ background: COLORS.panelBg }}>
+        <div className="min-h-screen" style={{ background: colors.panelBg }}>
           <TopMenuBar
             activeView={view}
             onNavigate={(next) => setView(next)}
@@ -3038,6 +3297,6 @@ export default function App() {
           )}
         </div>
       )}
-    </>
+    </ThemeContext.Provider>
   );
 }
