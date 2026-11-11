@@ -1027,6 +1027,24 @@ function computeElapsed(playback) {
   return playback.anchorElapsed;
 }
 
+// --- Per-player stage settings ----------------------------------------------
+// A player can override some stage settings (players[id].stageSettings). Keys
+// that are missing fall back to the global value in playback.
+const PLAYER_STAGE_SETTINGS = [
+  { key: 'stageFontSize', label: 'Schriftgrösse', min: 20, max: 120, step: 1, fallback: 64, format: (v) => `${v}px` },
+  { key: 'stageCommentWidthPercent', label: 'Breite Kommentarspalte', min: 0, max: 100, step: 1, fallback: 20, format: (v) => `${v}%` },
+  { key: 'stagePositionY', label: 'Vertikale Position', min: -50, max: 50, step: 1, fallback: 0, format: (v) => `${v > 0 ? '+' : ''}${v}%` },
+];
+
+function applyPlayerStageSettings(playback, stageSettings) {
+  if (!stageSettings) return playback;
+  const merged = { ...playback };
+  PLAYER_STAGE_SETTINGS.forEach(({ key }) => {
+    if (stageSettings[key] !== undefined && stageSettings[key] !== null) merged[key] = stageSettings[key];
+  });
+  return merged;
+}
+
 // --- WebSocket sync -------------------------------------------------------
 
 function useSyncedState() {
@@ -1174,6 +1192,20 @@ function useSyncedState() {
     }
   }, []);
 
+  const sendPlayerStageSettings = useCallback((targetPlayerId, stageSettings) => {
+    // Optimistic local update, the server broadcasts the sanitized result
+    setPlayers((prev) => {
+      if (!prev[targetPlayerId]) return prev;
+      const next = { ...prev[targetPlayerId] };
+      if (stageSettings && Object.keys(stageSettings).length) next.stageSettings = stageSettings;
+      else delete next.stageSettings;
+      return { ...prev, [targetPlayerId]: next };
+    });
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'setPlayerStageSettings', playerId: targetPlayerId, stageSettings: stageSettings || {} }));
+    }
+  }, []);
+
   const sendDeletePlayer = useCallback((targetPlayerId) => {
     if (wsRef.current && wsRef.current.readyState === 1) {
       wsRef.current.send(JSON.stringify({ type: 'deletePlayer', playerId: targetPlayerId }));
@@ -1189,6 +1221,7 @@ function useSyncedState() {
     sendSongs,
     sendPlayback,
     sendPlayerRole,
+    sendPlayerStageSettings,
     sendDeletePlayer,
     serverIp,
     serverPort,
@@ -1470,6 +1503,10 @@ function OptionsView({ playback, onChangePlayback }) {
                 /stage
               </span>
             </div>
+
+            <p className="text-[11px] leading-snug" style={{ color: COLORS.inkDim }}>
+              Grundeinstellungen für alle Stage-Geräte. Schriftgrösse, Kommentarspalte und vertikale Position lassen sich unter „Player-Verwaltung“ pro Gerät übersteuern.
+            </p>
 
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
@@ -2007,7 +2044,96 @@ function ProjectionView({ songs, playback, onExit, connected }) {
   );
 }
 
-function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePlayer }) {
+function PlayerStageSettings({ player, playback, onChange }) {
+  const { colors: COLORS, isDark } = useTheme();
+  const overrides = player.stageSettings || {};
+  const overrideCount = PLAYER_STAGE_SETTINGS.filter(({ key }) => overrides[key] !== undefined).length;
+  const [open, setOpen] = useState(overrideCount > 0);
+
+  const setValue = (key, value) => onChange({ ...overrides, [key]: value });
+  const resetValue = (key) => {
+    const next = { ...overrides };
+    delete next[key];
+    onChange(next);
+  };
+
+  return (
+    <div className="border-t pt-2" style={{ borderColor: COLORS.line }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between text-xs font-medium py-1"
+        style={{ color: COLORS.inkDim }}
+      >
+        <span className="flex items-center gap-1.5">
+          {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          Stage-Einstellungen
+        </span>
+        <span
+          className={`text-[10px] px-1.5 py-0.5 rounded ${overrideCount ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold' : ''}`}
+          style={overrideCount ? undefined : { color: COLORS.inkDim }}
+        >
+          {overrideCount ? `${overrideCount} angepasst` : 'Standard'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="space-y-3 pt-2">
+          {PLAYER_STAGE_SETTINGS.map((field) => {
+            const globalValue = playback[field.key] !== undefined ? playback[field.key] : field.fallback;
+            const isOverridden = overrides[field.key] !== undefined;
+            const value = isOverridden ? overrides[field.key] : globalValue;
+            return (
+              <div key={field.key} className="space-y-1">
+                <div className="flex items-center justify-between text-xs gap-2" style={{ color: COLORS.inkDim }}>
+                  <span>{field.label}</span>
+                  <span className="flex items-center gap-2">
+                    {isOverridden ? (
+                      <>
+                        <span className="font-mono font-semibold" style={{ color: COLORS.ink }}>{field.format(value)}</span>
+                        <button
+                          type="button"
+                          onClick={() => resetValue(field.key)}
+                          className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-zinc-100 hover:bg-zinc-200'}`}
+                          title={`Zurück auf Grundeinstellung (${field.format(globalValue)})`}
+                        >
+                          Standard
+                        </button>
+                      </>
+                    ) : (
+                      <span className="font-mono">{field.format(globalValue)} (Standard)</span>
+                    )}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                  value={value}
+                  onChange={(e) => setValue(field.key, Number(e.target.value))}
+                  className={`w-full accent-amber ${isOverridden ? '' : 'opacity-50'}`}
+                />
+              </div>
+            );
+          })}
+          {overrideCount > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange({})}
+              className="text-[11px] underline"
+              style={{ color: COLORS.inkDim }}
+            >
+              Alle auf Grundeinstellung zurücksetzen
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlayersView({ players = {}, playback = {}, localPlayerId, onSetPlayerRole, onSetPlayerStageSettings, onDeletePlayer }) {
   const { colors: COLORS, isDark } = useTheme();
   const playerList = Object.values(players);
 
@@ -2116,6 +2242,12 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                         </button>
                       </div>
                     </div>
+
+                    <PlayerStageSettings
+                      player={p}
+                      playback={playback}
+                      onChange={(stageSettings) => onSetPlayerStageSettings(p.id, stageSettings)}
+                    />
                   </div>
                 );
               })}
@@ -3455,6 +3587,7 @@ export default function App() {
     sendSongs,
     sendPlayback,
     sendPlayerRole,
+    sendPlayerStageSettings,
     sendDeletePlayer,
     serverIp,
     serverPort,
@@ -3463,6 +3596,12 @@ export default function App() {
   const elapsed = useElapsed(playback);
 
   const localPlayer = players[playerId] || null;
+  // Stage settings of this device (player) override the global ones
+  const localStageSettingsKey = JSON.stringify((localPlayer && localPlayer.stageSettings) || null);
+  const stagePlayback = useMemo(
+    () => applyPlayerStageSettings(playback, JSON.parse(localStageSettingsKey)),
+    [playback, localStageSettingsKey]
+  );
 
   // Sync state view changes with the browser URL (via history pushState)
   const changeView = (nextView) => {
@@ -3523,14 +3662,14 @@ export default function App() {
         localPlayer && localPlayer.role === 'live' ? (
           <ProjectionView songs={songs} playback={playback} onExit={() => changeView('control')} connected={connected} />
         ) : localPlayer && localPlayer.role === 'stage' ? (
-          <StageView songs={songs} playback={playback} onExit={() => changeView('control')} />
+          <StageView songs={songs} playback={stagePlayback} onExit={() => changeView('control')} />
         ) : (
           <UnassignedPlayerView playerId={playerId} serverVersion={serverVersion} />
         )
       ) : view === 'projection' ? (
         <ProjectionView songs={songs} playback={playback} onExit={() => changeView('control')} connected={connected} />
       ) : view === 'stage' ? (
-        <StageView songs={songs} playback={playback} onExit={() => changeView('control')} />
+        <StageView songs={songs} playback={stagePlayback} onExit={() => changeView('control')} />
       ) : (
         <div className="min-h-screen" style={{ background: colors.panelBg }}>
           <TopMenuBar
@@ -3553,8 +3692,10 @@ export default function App() {
           ) : view === 'players' ? (
             <PlayersView
               players={players}
+              playback={playback}
               localPlayerId={playerId}
               onSetPlayerRole={sendPlayerRole}
+              onSetPlayerStageSettings={sendPlayerStageSettings}
               onDeletePlayer={sendDeletePlayer}
             />
           ) : (

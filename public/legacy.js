@@ -610,6 +610,24 @@
     return computeLinesWithTimes(song);
   }
 
+  // Stage settings of this device (players[id].stageSettings) override the global ones
+  var PLAYER_STAGE_SETTING_KEYS = ['stageFontSize', 'stageCommentWidthPercent', 'stagePositionY'];
+
+  function getStagePlayback() {
+    var player = state.players && state.players[state.playerId];
+    var overrides = player && player.stageSettings;
+    if (!overrides) return state.playback;
+    var merged = {};
+    for (var k in state.playback) {
+      if (Object.prototype.hasOwnProperty.call(state.playback, k)) merged[k] = state.playback[k];
+    }
+    for (var i = 0; i < PLAYER_STAGE_SETTING_KEYS.length; i++) {
+      var key = PLAYER_STAGE_SETTING_KEYS[i];
+      if (overrides[key] !== undefined && overrides[key] !== null) merged[key] = overrides[key];
+    }
+    return merged;
+  }
+
   function render() {
     var view = getCurrentView();
     var song = null;
@@ -628,14 +646,14 @@
       if (localPlayer && localPlayer.role === 'live') {
         renderProjectionView(song, state.playback, elapsed);
       } else if (localPlayer && localPlayer.role === 'stage') {
-        renderStageView(song, state.playback, elapsed);
+        renderStageView(song, getStagePlayback(), elapsed);
       } else {
         renderPlayerUnassigned();
       }
     } else if (view === 'projection') {
       renderProjectionView(song, state.playback, elapsed);
     } else if (view === 'stage') {
-      renderStageView(song, state.playback, elapsed);
+      renderStageView(song, getStagePlayback(), elapsed);
     } else {
       renderLegacyControlInfo();
     }

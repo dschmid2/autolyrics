@@ -30,6 +30,7 @@ Autolyrics bietet verschiedene spezialisierte Ansichten, die über das Netzwerk 
 ### 4. Player-View (`/player`)
 * **Universelle Mobilgeräte-Ansicht**: Jedes Gerät generiert eine eindeutige ID (GUID in `localStorage`).
 * **Dynamische Rollenzuweisung**: Unverknüpfte Player zeigen einen Registrierungs-Bildschirm mit ihrer ID. Sobald in der Steuerung eine Rolle zugewiesen wird (`Live` oder `Stage`), wechselt die Anzeige automatisch auf die entsprechende Ansicht.
+* **Gerätespezifische Stage-Einstellungen**: In der Player-Verwaltung lassen sich Schriftgrösse, Breite der Kommentarspalte und vertikale Position pro Gerät übersteuern. Nicht angepasste Werte folgen den Grundeinstellungen unter „Einstellungen“.
 
 ### 5. Song- & Wellenform-Editor (`/editor`)
 * **MP3-Upload & Audio-Verknüpfung**: Hochladen von Audiodateien zur visuellen Ausrichtung der Songzeilen.

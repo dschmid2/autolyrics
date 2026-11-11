@@ -149,11 +149,14 @@ Application data is separated into three distinct JSON files. Writes are debounc
       "id": "<player_uuid>",
       "role": "live" | "stage" | null,
       "lastSeen": 1700000000000,
-      "online": true
+      "online": true,
+      "stageSettings": { "stageFontSize": 80, "stagePositionY": 10 }
     }
   }
   ```
-  The player ID is generated per browser and stored in `localStorage`.
+  The player ID is generated per browser and stored in `localStorage`. Every connected browser registers as a player (also the operator and devices opening `/stage` directly).
+  * `stageSettings` (optional): per-device overrides of `stageFontSize`, `stageCommentWidthPercent` and `stagePositionY`. Only overridden keys are present; missing keys fall back to the global value in `playback`. The server whitelists and clamps them (`sanitizeStageSettings`). Applied to `StageView` on that device — both on `/player` with role `stage` and on `/stage` — via `applyPlayerStageSettings()` (React) / `getStagePlayback()` (legacy). The field list lives in `PLAYER_STAGE_SETTINGS` (React), `PLAYER_STAGE_SETTING_LIMITS` (server) and `PLAYER_STAGE_SETTING_KEYS` (legacy) — keep them in sync.
+  * `registerPlayer` must preserve existing fields (role, stageSettings) of a known player.
 
 *(Note: A fallback migration automatically reads legacy `data/state.json` if the individual files do not yet exist. With no data at all, the server seeds a single demo song.)*
 
@@ -177,6 +180,7 @@ Application data is separated into three distinct JSON files. Writes are debounc
 * **Client to Server**:
   * `{ type: 'registerPlayer', playerId }` (sent on every connect)
   * `{ type: 'setPlayerRole', playerId, role }`
+  * `{ type: 'setPlayerStageSettings', playerId, stageSettings }` (replaces the player's overrides; `{}` resets to global settings)
   * `{ type: 'deletePlayer', playerId }`
   * `{ type: 'setSongs', songs }` (replaces the full song list)
   * `{ type: 'setPlayback', playback }` (replaces the full playback object)
@@ -192,7 +196,7 @@ Application data is separated into three distinct JSON files. Writes are debounc
 All main view components and state management reside in `src/app.jsx`:
 
 1. `THEME_PALETTES`, `ThemeContext`, `useTheme()`: light/dark theme for the operator UI (persisted in `localStorage` as `autolyrics_theme`). `/live` and `/stage` always use the dark stage colors.
-2. `useSyncedState()`: WebSocket hook for bi-directional synchronization with `/ws` (returns `songs`, `playback`, `players`, `connected`, `playerId`, `sendSongs`, `sendPlayback`, `sendPlayerRole`, `sendDeletePlayer`, `serverIp`, `serverPort`).
+2. `useSyncedState()`: WebSocket hook for bi-directional synchronization with `/ws` (returns `songs`, `playback`, `players`, `connected`, `playerId`, `sendSongs`, `sendPlayback`, `sendPlayerRole`, `sendPlayerStageSettings`, `sendDeletePlayer`, `serverIp`, `serverPort`, `serverVersion`).
 3. `useElapsed(playback)` / `computeElapsed(playback)`: current playback position in seconds from `anchorEpoch` and `anchorElapsed`.
 4. `useLineIndex(lines, playback, leadSeconds)` and `useSongCompleted(lines, playback)`: active line and end-of-song detection.
 5. `computeLinesWithTimes(song)`: converts song lines (timed in `sec`, `relative`, `bar_beat`, `beat`, or `relative_bar_beat`) into sorted absolute timestamps (`t`) plus computed `bar`/`beat`. `updateLineTimestamp()` does the reverse when a marker is dragged.
@@ -200,7 +204,7 @@ All main view components and state management reside in `src/app.jsx`:
 7. `useAudioBuffer`, `WaveformCanvas` & `WaveformEditor`: Web Audio decoding and canvas waveform with bar/beat grid, drag-and-drop line markers (`single` vs `following` drag modes), positive/negative `audioOffset`, zoom, numbered markers, and a "send to screens" toggle that drives the live displays from the editor's playback.
 8. Views (selected in `App()` from the URL path; `/live`, `/stage`, `/player` are real routes, the operator sub-views are internal state at `/`):
    * `ControlView` (with `TopMenuBar`): song selection, playback control, jump-to-line, mobile QR codes.
-   * `PlayersView`: list of connected devices, role assignment and deletion.
+   * `PlayersView`: list of connected devices, role assignment, deletion and per-device stage settings (`PlayerStageSettings`).
    * `ProjectionView`: audience view (`/live`) showing original line and translation, heartbeat dot, auto blackout if disconnected > 30 s or song ends; skips `stageOnly` lines.
    * `StageView`: teleprompter (`/stage`) with past/future lines, comment column and stage lead seconds.
    * `UnassignedPlayerView`: shown on `/player` until the operator assigns a role (`live` or `stage`).
