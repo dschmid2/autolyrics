@@ -8,6 +8,16 @@ const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 8080;
 
+// Version info generated at build time by scripts/generate-version.js
+function loadVersionInfo() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'version.json'), 'utf8'));
+  } catch (e) {
+    return { version: 'unbekannt', build: null, commit: null, builtAt: null };
+  }
+}
+const VERSION_INFO = loadVersionInfo();
+
 function getLocalIpAddress() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
@@ -161,7 +171,8 @@ function persist() {
 const app = express();
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/uploads', express.static(UPLOADS_DIR));
-app.get('/healthz', (req, res) => res.json({ ok: true }));
+app.get('/healthz', (req, res) => res.json({ ok: true, version: VERSION_INFO.version }));
+app.get('/api/version', (req, res) => res.json(VERSION_INFO));
 
 app.post('/api/upload', upload.single('audio'), (req, res) => {
   if (!req.file) {
@@ -219,7 +230,8 @@ wss.on('connection', (ws) => {
     players: state.players,
     serverIp: getLocalIpAddress(),
     serverPort: PORT,
-    serverNow: Date.now()
+    serverNow: Date.now(),
+    serverVersion: VERSION_INFO.version
   }));
 
   ws.on('message', (raw) => {
@@ -299,6 +311,6 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Autolyrics läuft auf Port ${PORT}`);
+  console.log(`Autolyrics ${VERSION_INFO.version}${VERSION_INFO.commit ? ` (${VERSION_INFO.commit})` : ''} läuft auf Port ${PORT}`);
   console.log(`Daten werden gespeichert in: ${DATA_DIR} (songs.json, playback.json, players.json)`);
 });

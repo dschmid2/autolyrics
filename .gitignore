@@ -4,3 +4,5 @@ data
 public/bundle.js
 public/bundle.css
 public/styles.css
+src/version.json
+public/version.json

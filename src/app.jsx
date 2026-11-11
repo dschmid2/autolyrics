@@ -1036,6 +1036,7 @@ function useSyncedState() {
   const [connected, setConnected] = useState(false);
   const [serverIp, setServerIp] = useState('');
   const [serverPort, setServerPort] = useState('');
+  const [serverVersion, setServerVersion] = useState('');
   const playerIdRef = useRef(getOrCreatePlayerId());
   const wsRef = useRef(null);
   const lastMessageTimeRef = useRef(Date.now());
@@ -1095,6 +1096,7 @@ function useSyncedState() {
             if (msg.players) setPlayers(msg.players);
             if (msg.serverIp) setServerIp(msg.serverIp);
             if (msg.serverPort) setServerPort(msg.serverPort);
+            if (msg.serverVersion) setServerVersion(msg.serverVersion);
           }
           if (msg.type === 'songs') setSongs(msg.songs);
           if (msg.type === 'playback') setPlayback(msg.playback);
@@ -1190,6 +1192,7 @@ function useSyncedState() {
     sendDeletePlayer,
     serverIp,
     serverPort,
+    serverVersion,
   };
 }
 
@@ -1581,7 +1584,38 @@ function OptionsView({ playback, onChangePlayback }) {
   );
 }
 
-function UnassignedPlayerView({ playerId }) {
+// Shows the bundled app version. If the server runs a different version, this
+// browser still has an old bundle cached and needs a reload.
+function VersionBadge({ serverVersion, className = '', style }) {
+  const outdated = !!serverVersion && serverVersion !== versionData.version;
+  const details = [
+    `Version ${versionData.version}`,
+    versionData.commit ? `Commit ${versionData.commit}` : null,
+    versionData.builtAt ? `Build ${new Date(versionData.builtAt).toLocaleString('de-DE')}` : null,
+    outdated ? `Server läuft mit ${serverVersion} – bitte Seite neu laden` : null,
+  ].filter(Boolean).join('\n');
+
+  if (outdated) {
+    return (
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        title={details}
+        className={`text-[10px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap ${className}`}
+        style={{ ...style, background: '#D89A3E', color: '#221F1A' }}
+      >
+        v{versionData.version} → v{serverVersion} neu laden
+      </button>
+    );
+  }
+  return (
+    <span title={details} className={`text-[10px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap ${className}`} style={style}>
+      v{versionData.version}
+    </span>
+  );
+}
+
+function UnassignedPlayerView({ playerId, serverVersion }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center select-none cursor-none" style={{ background: COLORS.stageBg, color: COLORS.stageText }}>
       <div className="max-w-md w-full p-8 rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-2xl space-y-6">
@@ -1600,6 +1634,8 @@ function UnassignedPlayerView({ playerId }) {
           <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Player ID</div>
           <div className="text-lg font-mono font-bold text-amber-400 select-all">{playerId}</div>
         </div>
+
+        <VersionBadge serverVersion={serverVersion} className="text-zinc-500" />
       </div>
     </div>
   );
@@ -2091,7 +2127,7 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
   );
 }
 
-function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, playersCount = 0 }) {
+function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, playersCount = 0, serverVersion }) {
   const { colors: COLORS, isDark, toggleTheme } = useTheme();
   const navItems = [
     { id: 'control', label: 'Steuerung', icon: MonitorPlay },
@@ -2107,9 +2143,7 @@ function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, pla
         <div className="flex items-center gap-2 sm:gap-6 overflow-x-auto py-1 min-w-0 no-scrollbar">
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <span className="font-bold text-sm sm:text-base tracking-tight" style={{ color: COLORS.ink }}>Autolyrics</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded hidden sm:inline" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
-              v{versionData.version}
-            </span>
+            <VersionBadge serverVersion={serverVersion} style={{ background: COLORS.panelBg2, color: COLORS.inkDim }} />
           </div>
 
           <nav className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar py-0.5">
@@ -3423,7 +3457,8 @@ export default function App() {
     sendPlayerRole,
     sendDeletePlayer,
     serverIp,
-    serverPort
+    serverPort,
+    serverVersion
   } = useSyncedState();
   const elapsed = useElapsed(playback);
 
@@ -3490,7 +3525,7 @@ export default function App() {
         ) : localPlayer && localPlayer.role === 'stage' ? (
           <StageView songs={songs} playback={playback} onExit={() => changeView('control')} />
         ) : (
-          <UnassignedPlayerView playerId={playerId} />
+          <UnassignedPlayerView playerId={playerId} serverVersion={serverVersion} />
         )
       ) : view === 'projection' ? (
         <ProjectionView songs={songs} playback={playback} onExit={() => changeView('control')} connected={connected} />
@@ -3504,6 +3539,7 @@ export default function App() {
             onGotoProjection={() => changeView('projection')}
             onGotoStage={() => changeView('stage')}
             playersCount={Object.keys(players).length}
+            serverVersion={serverVersion}
           />
           {view === 'editor' ? (
             <EditorView
