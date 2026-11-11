@@ -85,14 +85,14 @@ autolyrics/
 │   ├── index.html         # HTML-Einstiegspunkt
 │   └── styles.css         # Gebündeltes Tailwind CSS
 ├── scripts/
-│   └── generate-version.js # Generiert src/version.json anhand der Git-Commits
+│   └── generate-version.js # Generiert src/version.json und public/version.json
 ├── server/
 │   └── index.js           # Express- und WebSocket-Server
 ├── src/
 │   ├── app.jsx            # Haupt-React-Anwendung mit allen Views & Logik
 │   ├── index.jsx          # React DOM Rendering Einstiegspunkt
 │   ├── styles.css         # Tailwind-Quelldatei
-│   └── version.json       # Generierte Versionsdatei
+│   └── version.json       # Generierte Versionsdatei (nicht eingecheckt)
 ├── Dockerfile             # Container-Build-Anweisung
 ├── docker-compose.yml     # Docker Compose Konfiguration
 ├── package.json           # Dependencies und NPM Scripts
@@ -127,6 +127,17 @@ autolyrics/
    npm start
    ```
    Die Anwendung läuft standardmäßig unter `http://localhost:8080`.
+
+### Versionierung
+
+Die Version hat das Format `<Major>.<Minor>.<Build>`, z. B. `1.1.57`:
+
+* **Major/Minor** werden in `package.json` (`"version"`) gepflegt, die dritte Stelle dort wird ignoriert. Hochzählen z. B. mit `npm version minor --no-git-tag-version`.
+  * **Major**: inkompatible Änderungen (Datenformat, Protokoll – alle Geräte müssen neu laden).
+  * **Minor**: neue Funktionen.
+* **Build** ist die Laufnummer der GitHub Action (`github.run_number`). Sie wird beim Docker-Build als Build-Arg übergeben. Lokale Builds heißen `<Major>.<Minor>.0-dev`.
+* Das Docker-Image wird mit der Version, `latest` und dem Commit-SHA getaggt.
+* Die Version steht in der Kopfzeile der Steuerung und auf dem Player-Registrierungsbildschirm. Läuft der Server mit einer anderen Version als der Browser, erscheint dort ein Hinweis zum Neuladen. Abrufbar ist sie außerdem über `GET /api/version`.
 
 ---
 

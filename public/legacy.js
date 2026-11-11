@@ -37,6 +37,7 @@
       stagePositionY: 0
     },
     players: {},
+    serverVersion: null,
     connected: false,
     playerId: getOrCreatePlayerId()
   };
@@ -342,6 +343,7 @@
           if (msg.songs) state.songs = msg.songs;
           if (msg.playback) state.playback = msg.playback;
           if (msg.players) state.players = msg.players;
+          if (msg.serverVersion) state.serverVersion = msg.serverVersion;
         } else if (msg.type === 'songs') {
           state.songs = msg.songs;
         } else if (msg.type === 'playback') {
@@ -377,6 +379,11 @@
     return '<div class="legacy-beat-dot" style="-webkit-animation-duration: ' + pulseDuration + 's; animation-duration: ' + pulseDuration + 's;"></div>';
   }
 
+  function renderVersionInfo() {
+    if (!state.serverVersion) return '';
+    return '<div style="margin-top: 16px; font-size: 11px; font-family: monospace; color: #71717a;">v' + escapeHtml(state.serverVersion) + '</div>';
+  }
+
   function renderPlayerUnassigned() {
     var html = [
       renderConnectionBadge(),
@@ -390,6 +397,7 @@
       '      <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #71717a; margin-bottom: 6px;">Player ID</div>',
       '      <div style="font-size: 15px; font-family: monospace; font-weight: bold; color: #fbbf24; word-break: break-all;">' + escapeHtml(state.playerId) + '</div>',
       '    </div>',
+      renderVersionInfo(),
       '  </div>',
       '</div>'
     ].join('\n');
@@ -591,6 +599,7 @@
       '      <a href="/live" style="display: block; padding: 12px; background: #27272a; border-radius: 8px; color: #ffffff; text-decoration: none; font-weight: bold;">📽 Live-Projektion öffnen (/live)</a>',
       '    </div>',
       '    <p style="margin-top: 24px; font-size: 12px; color: #71717a;">Hinweis: Die vollständige Steuerung und der Song-Editor erfordern einen modernen Browser.</p>',
+      renderVersionInfo(),
       '  </div>',
       '</div>'
     ].join('\n');

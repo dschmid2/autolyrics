@@ -4,7 +4,11 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
-RUN npm run build
+# Buildnummer und Commit kommen aus der GitHub Action (siehe .github/workflows/docker-image.yml).
+# Ohne diese Build-Args entsteht eine Version "<major>.<minor>.0-dev".
+ARG APP_BUILD_NUMBER=
+ARG GIT_SHA=
+RUN APP_BUILD_NUMBER="$APP_BUILD_NUMBER" GIT_SHA="$GIT_SHA" npm run build
 
 # --- Laufzeit-Stufe: nur das, was der Server zur Laufzeit braucht ----------
 FROM node:20-alpine
