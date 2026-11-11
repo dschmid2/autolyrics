@@ -231,6 +231,18 @@ function currentIndex(lines, elapsed) {
   return idx;
 }
 
+// Index of the last line whose start time has been reached (ignores line
+// durations and the song end), or -1 before the first line.
+function startedIndex(lines, elapsed) {
+  if (!lines || !lines.length) return -1;
+  let idx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].t <= elapsed + LINE_START_TOLERANCE) idx = i;
+    else break;
+  }
+  return idx;
+}
+
 function fmtTime(s) {
   if (!isFinite(s) || s < 0) s = 0;
   const m = Math.floor(s / 60);
@@ -991,7 +1003,8 @@ function defaultPlayback() {
     stageLeadSeconds: 0,
     stageCommentWidthPercent: 20,
     stageLineSpacing: 24,
-    stagePositionY: 0
+    stagePositionY: 0,
+    stageShowTitle: false
   };
 }
 
@@ -1270,6 +1283,36 @@ function useLineIndex(lines, playback, leadSeconds = 0) {
   return idx;
 }
 
+// Stage view line state:
+//  activeIdx   -> line that is currently sung (white), -1 if none
+//  positionIdx -> line the view is centered on. Before the first line this is
+//                 line 0 (shown grey until its time); after a line's duration
+//                 or the song end the view stays on the last started line.
+function useStageLineState(lines, playback, leadSeconds = 0) {
+  const compute = () => {
+    if (!lines || !lines.length) return '-1:0';
+    const el = computeElapsed(playback) + leadSeconds;
+    const active = currentIndex(lines, el);
+    const position = active >= 0 ? active : Math.max(0, startedIndex(lines, el));
+    return `${active}:${position}`;
+  };
+
+  const [key, setKey] = useState(compute);
+
+  useEffect(() => {
+    setKey(compute());
+    if (playback.status !== 'playing' || !lines || !lines.length) return;
+    const iv = setInterval(() => {
+      const next = compute();
+      setKey((prev) => (prev !== next ? next : prev));
+    }, 100);
+    return () => clearInterval(iv);
+  }, [playback, lines, leadSeconds]);
+
+  const [activeIdx, positionIdx] = key.split(':').map(Number);
+  return { activeIdx, positionIdx };
+}
+
 function useSongCompleted(lines, playback) {
   const checkCompleted = () => {
     if (!lines || !lines.length) return false;
@@ -1515,6 +1558,16 @@ function OptionsView({ playback, onChangePlayback }) {
               Grundeinstellungen für alle Stage-Geräte. Schriftgrösse, Kommentarspalte und vertikale Position lassen sich unter „Player-Verwaltung“ pro Gerät übersteuern.
             </p>
 
+            <label className="flex items-center justify-between text-xs cursor-pointer" style={{ color: COLORS.inkDim }}>
+              <span>Songtitel als Titelzeile anzeigen</span>
+              <input
+                type="checkbox"
+                checked={!!playback.stageShowTitle}
+                onChange={(e) => onChangePlayback({ stageShowTitle: e.target.checked })}
+                className="w-4 h-4 accent-amber"
+              />
+            </label>
+
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
                 <span>Schriftgrösse Stage-View</span>
@@ -1703,10 +1756,10 @@ function StageView({ songs, playback, onExit }) {
   const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
   const stageLineSpacing = playback.stageLineSpacing !== undefined ? playback.stageLineSpacing : 24;
   const stagePositionY = playback.stagePositionY !== undefined ? playback.stagePositionY : 0;
-  const idx = useLineIndex(lines, playback, stageLeadSeconds);
-  const currentIdx = idx >= 0 ? idx : 0;
+  const { activeIdx, positionIdx: currentIdx } = useStageLineState(lines, playback, stageLeadSeconds);
 
   const stageFontSize = playback.stageFontSize !== undefined ? playback.stageFontSize : 64;
+  const stageShowTitle = !!playback.stageShowTitle;
   const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
   const commentPercent = playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20;
 
@@ -1796,7 +1849,21 @@ function StageView({ songs, playback, onExit }) {
       className="fixed inset-0 select-none cursor-none flex flex-col justify-center items-center px-6 overflow-hidden"
       style={{ background: COLORS.stageBg }}
     >
-      <div className="relative w-full h-full overflow-hidden">
+      {stageShowTitle && (
+        <div
+          className="w-full shrink-0 border-b border-zinc-800 py-3 truncate"
+          style={{
+            color: COLORS.stageTextDim,
+            fontFamily: 'Gelasio, Georgia, "Iowan Old Style", ui-serif, serif',
+            fontSize: `${stageFontSize * 0.5}px`,
+            lineHeight: '1.2',
+            paddingLeft: commentPercent > 0 && commentPercent < 100 ? `calc(${commentPercent}% + 1.5rem)` : 0,
+          }}
+        >
+          {song ? song.title : ''}
+        </div>
+      )}
+      <div className="relative w-full flex-1 min-h-0 overflow-hidden">
         {/* Durchgehende vertikale Trennlinie */}
         {commentPercent > 0 && commentPercent < 100 && (
           <div
@@ -1831,7 +1898,8 @@ function StageView({ songs, playback, onExit }) {
               )}
               {lines.slice(startIndex, endIndex + 1).map((l, sliceIdx) => {
                 const i = startIndex + sliceIdx;
-                const isCurrent = i === currentIdx;
+                // The centered line is only highlighted once its time has come
+                const isCurrent = i === currentIdx && activeIdx >= 0;
                 const isPast = i < currentIdx;
                 const isVisible = i >= currentIdx - stagePastLines && i <= currentIdx + stageFutureLines;
 

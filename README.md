@@ -52,6 +52,7 @@ Autolyrics bietet verschiedene spezialisierte Ansichten, die über das Netzwerk 
 * Positionierung des Textes (X- und Y-Achse auf dem Bildschirm).
 * Aktivierung/Deaktivierung des Heartbeat-Punkts.
 * Konfiguration der Stage-View (Anzahl vergangener/zukünftiger Zeilen, Bühnenvorlauf in Sekunden).
+* Optionale Titelzeile mit dem Songtitel auf der Stage-View (halbe Schriftgrösse des Songtexts).
 
 ---
 

@@ -135,7 +135,8 @@ Application data is separated into three distinct JSON files. Writes are debounc
     "stageLeadSeconds": 0,
     "stageCommentWidthPercent": 20,
     "stageLineSpacing": 24,
-    "stagePositionY": 0
+    "stagePositionY": 0,
+    "stageShowTitle": false
   }
   ```
   * `status`: `"playing"` | `"paused"` | `"stopped"`.
@@ -209,7 +210,7 @@ All main view components and state management reside in `src/app.jsx`:
    * `ControlView` (with `TopMenuBar`): song selection, playback control, jump-to-line, mobile QR codes.
    * `PlayersView`: list of connected devices, role assignment, deletion and per-device stage settings (`PlayerStageSettings`).
    * `ProjectionView`: audience view (`/live`) showing original line and translation, heartbeat dot, auto blackout if disconnected > 30 s or song ends; skips `stageOnly` lines.
-   * `StageView`: teleprompter (`/stage`) with past/future lines, comment column and stage lead seconds.
+   * `StageView`: teleprompter (`/stage`) with past/future lines, comment column, stage lead seconds and an optional static title bar with the song title (`stageShowTitle`, half the stage font size). Uses `useStageLineState()`: `activeIdx` (line being sung, white) vs. `positionIdx` (line the view is centered on). Before the first line starts, line 0 is centered but grey; after a line's duration or the song end the view stays on the last started line (grey). `legacy.js` mirrors this with `startedIndex()`.
    * `UnassignedPlayerView`: shown on `/player` until the operator assigns a role (`live` or `stage`).
    * `EditorView` & `SongEditor`: manage songs, line timings, MP3 uploads; `ImportExport` handles JSON file download/upload and plaintext import.
    * `OptionsView`: font sizes, text position/width/alignment, translation spacing, stage view layout, heartbeat dot.
