@@ -299,6 +299,16 @@ wss.on('connection', (ws) => {
       broadcast({ type: 'players', players: state.players });
     }
 
+    if (msg.type === 'setPlayerName' && msg.playerId && state.players[msg.playerId]) {
+      const name = typeof msg.name === 'string' ? msg.name.replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+      const next = { ...state.players[msg.playerId] };
+      if (name) next.name = name;
+      else delete next.name;
+      state.players[msg.playerId] = next;
+      persist();
+      broadcast({ type: 'players', players: state.players });
+    }
+
     if (msg.type === 'setPlayerStageSettings' && msg.playerId && state.players[msg.playerId]) {
       const stageSettings = sanitizeStageSettings(msg.stageSettings);
       const next = { ...state.players[msg.playerId] };

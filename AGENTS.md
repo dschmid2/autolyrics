@@ -150,11 +150,13 @@ Application data is separated into three distinct JSON files. Writes are debounc
       "role": "live" | "stage" | null,
       "lastSeen": 1700000000000,
       "online": true,
+      "name": "iPad links",
       "stageSettings": { "stageFontSize": 80, "stagePositionY": 10 }
     }
   }
   ```
   The player ID is generated per browser and stored in `localStorage`. Every connected browser registers as a player (also the operator and devices opening `/stage` directly).
+  * `name` (optional): operator-chosen device name (max 40 chars), shown in the player management and on the `/player` registration screen.
   * `stageSettings` (optional): per-device overrides of `stageFontSize`, `stageCommentWidthPercent` and `stagePositionY`. Only overridden keys are present; missing keys fall back to the global value in `playback`. The server whitelists and clamps them (`sanitizeStageSettings`). Applied to `StageView` on that device — both on `/player` with role `stage` and on `/stage` — via `applyPlayerStageSettings()` (React) / `getStagePlayback()` (legacy). The field list lives in `PLAYER_STAGE_SETTINGS` (React), `PLAYER_STAGE_SETTING_LIMITS` (server) and `PLAYER_STAGE_SETTING_KEYS` (legacy) — keep them in sync.
   * `registerPlayer` must preserve existing fields (role, stageSettings) of a known player.
 
@@ -180,6 +182,7 @@ Application data is separated into three distinct JSON files. Writes are debounc
 * **Client to Server**:
   * `{ type: 'registerPlayer', playerId }` (sent on every connect)
   * `{ type: 'setPlayerRole', playerId, role }`
+  * `{ type: 'setPlayerName', playerId, name }` (empty name removes it)
   * `{ type: 'setPlayerStageSettings', playerId, stageSettings }` (replaces the player's overrides; `{}` resets to global settings)
   * `{ type: 'deletePlayer', playerId }`
   * `{ type: 'setSongs', songs }` (replaces the full song list)

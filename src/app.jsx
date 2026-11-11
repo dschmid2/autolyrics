@@ -1192,6 +1192,12 @@ function useSyncedState() {
     }
   }, []);
 
+  const sendPlayerName = useCallback((targetPlayerId, name) => {
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'setPlayerName', playerId: targetPlayerId, name }));
+    }
+  }, []);
+
   const sendPlayerStageSettings = useCallback((targetPlayerId, stageSettings) => {
     // Optimistic local update, the server broadcasts the sanitized result
     setPlayers((prev) => {
@@ -1221,6 +1227,7 @@ function useSyncedState() {
     sendSongs,
     sendPlayback,
     sendPlayerRole,
+    sendPlayerName,
     sendPlayerStageSettings,
     sendDeletePlayer,
     serverIp,
@@ -1652,7 +1659,7 @@ function VersionBadge({ serverVersion, className = '', style }) {
   );
 }
 
-function UnassignedPlayerView({ playerId, serverVersion }) {
+function UnassignedPlayerView({ playerId, playerName, serverVersion }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center select-none cursor-none" style={{ background: COLORS.stageBg, color: COLORS.stageText }}>
       <div className="max-w-md w-full p-8 rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-2xl space-y-6">
@@ -1670,6 +1677,7 @@ function UnassignedPlayerView({ playerId, serverVersion }) {
         <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Player ID</div>
           <div className="text-lg font-mono font-bold text-amber-400 select-all">{playerId}</div>
+          {playerName && <div className="text-sm font-semibold text-white pt-1">{playerName}</div>}
         </div>
 
         <VersionBadge serverVersion={serverVersion} className="text-zinc-500" />
@@ -2133,7 +2141,41 @@ function PlayerStageSettings({ player, playback, onChange }) {
   );
 }
 
-function PlayersView({ players = {}, playback = {}, localPlayerId, onSetPlayerRole, onSetPlayerStageSettings, onDeletePlayer }) {
+function PlayerNameInput({ player, onSave }) {
+  const { colors: COLORS } = useTheme();
+  const [value, setValue] = useState(player.name || '');
+  const [focused, setFocused] = useState(false);
+  // Follow updates from other operators while not editing
+  useEffect(() => {
+    if (!focused) setValue(player.name || '');
+  }, [player.name, focused]);
+
+  const commit = () => {
+    const trimmed = value.replace(/\s+/g, ' ').trim().slice(0, 40);
+    setValue(trimmed);
+    if (trimmed !== (player.name || '')) onSave(trimmed);
+  };
+
+  return (
+    <input
+      type="text"
+      value={value}
+      maxLength={40}
+      placeholder="Gerätename (z. B. iPad links)"
+      onChange={(e) => setValue(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => { setFocused(false); commit(); }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') { setValue(player.name || ''); setTimeout(() => e.target.blur(), 0); }
+      }}
+      className="w-full min-w-0 text-sm font-semibold bg-transparent border-b border-transparent hover:border-current focus:border-amber-500 outline-none py-0.5 placeholder:font-normal placeholder:italic placeholder:opacity-50"
+      style={{ color: COLORS.ink }}
+    />
+  );
+}
+
+function PlayersView({ players = {}, playback = {}, localPlayerId, onSetPlayerRole, onSetPlayerName, onSetPlayerStageSettings, onDeletePlayer }) {
   const { colors: COLORS, isDark } = useTheme();
   const playerList = Object.values(players);
 
@@ -2175,17 +2217,15 @@ function PlayersView({ players = {}, playback = {}, localPlayerId, onSetPlayerRo
                     className="p-3.5 rounded-lg shadow-sm space-y-3 border"
                     style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
                         <span
-                          className={`w-2.5 h-2.5 rounded-full ${p.online ? 'bg-emerald-500 ring-2 ring-emerald-200' : 'bg-zinc-400'}`}
+                          className={`w-2.5 h-2.5 rounded-full shrink-0 ${p.online ? 'bg-emerald-500 ring-2 ring-emerald-200' : 'bg-zinc-400'}`}
                           title={p.online ? 'Online' : 'Offline'}
                         />
-                        <span className="font-mono text-xs font-bold" style={{ color: COLORS.ink }}>
-                          {p.id}
-                        </span>
+                        <PlayerNameInput player={p} onSave={(name) => onSetPlayerName(p.id, name)} />
                         {isSelf && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                          <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400">
                             Dieses Gerät
                           </span>
                         )}
@@ -2197,6 +2237,9 @@ function PlayersView({ players = {}, playback = {}, localPlayerId, onSetPlayerRo
                       >
                         <Trash2 size={15} />
                       </button>
+                    </div>
+                    <div className="font-mono text-[10px] -mt-2 pl-[18px] truncate" style={{ color: COLORS.inkDim }} title={p.id}>
+                      {p.id}
                     </div>
 
                     <div className="flex items-center justify-between pt-1">
@@ -3587,6 +3630,7 @@ export default function App() {
     sendSongs,
     sendPlayback,
     sendPlayerRole,
+    sendPlayerName,
     sendPlayerStageSettings,
     sendDeletePlayer,
     serverIp,
@@ -3664,7 +3708,7 @@ export default function App() {
         ) : localPlayer && localPlayer.role === 'stage' ? (
           <StageView songs={songs} playback={stagePlayback} onExit={() => changeView('control')} />
         ) : (
-          <UnassignedPlayerView playerId={playerId} serverVersion={serverVersion} />
+          <UnassignedPlayerView playerId={playerId} playerName={localPlayer && localPlayer.name} serverVersion={serverVersion} />
         )
       ) : view === 'projection' ? (
         <ProjectionView songs={songs} playback={playback} onExit={() => changeView('control')} connected={connected} />
@@ -3695,6 +3739,7 @@ export default function App() {
               playback={playback}
               localPlayerId={playerId}
               onSetPlayerRole={sendPlayerRole}
+              onSetPlayerName={sendPlayerName}
               onSetPlayerStageSettings={sendPlayerStageSettings}
               onDeletePlayer={sendDeletePlayer}
             />
