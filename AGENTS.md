@@ -135,7 +135,9 @@ Application data is separated into three distinct JSON files. Writes are debounc
   }
   ```
   * `status`: `"playing"` | `"paused"` | `"stopped"`.
-  * Timing model: the server never ticks a clock. Clients compute the current position as `anchorElapsed + (Date.now() - anchorEpoch) / 1000` while `playing`, otherwise `anchorElapsed`. Any seek/start/pause just sets a new anchor.
+  * Timing model: the server never ticks a clock. Clients compute the current position as `anchorElapsed + (serverNow() - anchorEpoch) / 1000` while `playing`, otherwise `anchorElapsed`. Any seek/start/pause just sets a new anchor.
+  * `anchorEpoch` is in **server time**. Always create it with `serverNow()`, never `Date.now()` — device clocks differ, and a stage device whose clock runs behind the operator would otherwise show the previous line after a jump. `serverNow()` = `Date.now()` + an offset each client estimates from ping/pong round trips (`recordClockSample`, in both `src/app.jsx` and `public/legacy.js`).
+  * `currentIndex()` treats a line as started 50 ms before its timestamp (`LINE_START_TOLERANCE`) to absorb remaining clock sync error.
 * `data/players.json`: Registered player devices:
   ```json
   {
@@ -164,14 +166,16 @@ Application data is separated into three distinct JSON files. Writes are debounc
   * `{ type: 'songs', songs }`
   * `{ type: 'playback', playback }`
   * `{ type: 'players', players }`
-  * `{ type: 'ping' }` / `{ type: 'pong' }` (application-level keepalive)
+  * `{ type: 'ping' }` (application-level keepalive)
+  * `{ type: 'pong', t0, serverNow }` (reply to a client ping; used for clock sync)
+  * The `state` message also carries `serverNow` (rough initial clock offset).
 * **Client to Server**:
   * `{ type: 'registerPlayer', playerId }` (sent on every connect)
   * `{ type: 'setPlayerRole', playerId, role }`
   * `{ type: 'deletePlayer', playerId }`
   * `{ type: 'setSongs', songs }` (replaces the full song list)
   * `{ type: 'setPlayback', playback }` (replaces the full playback object)
-  * `{ type: 'ping' }` / `{ type: 'pong' }`
+  * `{ type: 'ping', t0 }` (`t0` = client `Date.now()`; sent every 10 s and in a short burst after connecting) / `{ type: 'pong' }`
 * **Broadcast rules**: `songs` and `playback` updates are broadcast to all clients **except the sender** (the sender updates optimistically); `players` updates go to everyone. The server overwrites `updatedAt` on `setPlayback`.
 * **Keepalive**: The server sends WS pings plus a JSON `ping` every 15 s and terminates unresponsive sockets. Clients send a JSON `ping` every 10 s, force-reconnect if nothing was received for 35 s, and also reconnect on `visibilitychange`, `pageshow`, `focus` and `online` (important for iPads waking from sleep).
 * **No authentication**: any client on the network can change songs and playback. The app is meant for trusted local networks.

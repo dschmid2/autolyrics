@@ -91,9 +91,32 @@
     }
   }
 
+  // --- Server clock sync (anchorEpoch is in server time, see src/app.jsx) ---
+  var serverClockOffset = 0; // serverTime - localTime in ms
+  var clockSamples = [];
+  var MAX_CLOCK_SAMPLES = 8;
+
+  function serverNow() {
+    return Date.now() + serverClockOffset;
+  }
+
+  function recordClockSample(t0, serverTime) {
+    var t1 = Date.now();
+    var rtt = t1 - Number(t0);
+    serverTime = Number(serverTime);
+    if (isNaN(rtt) || isNaN(serverTime) || rtt < 0 || rtt > 10000) return;
+    clockSamples.push({ rtt: rtt, offset: serverTime + rtt / 2 - t1 });
+    if (clockSamples.length > MAX_CLOCK_SAMPLES) clockSamples.shift();
+    var best = clockSamples[0];
+    for (var i = 1; i < clockSamples.length; i++) {
+      if (clockSamples[i].rtt < best.rtt) best = clockSamples[i];
+    }
+    serverClockOffset = best.offset;
+  }
+
   function computeElapsed(playback) {
     if (playback && playback.status === 'playing') {
-      return (Number(playback.anchorElapsed) || 0) + (Date.now() - (Number(playback.anchorEpoch) || Date.now())) / 1000;
+      return (Number(playback.anchorElapsed) || 0) + (serverNow() - (Number(playback.anchorEpoch) || serverNow())) / 1000;
     }
     return Number(playback && playback.anchorElapsed) || 0;
   }
@@ -165,7 +188,7 @@
 
     var idx = -1;
     for (var i = 0; i < lines.length; i++) {
-      if (lines[i].t <= elapsed + 0.001) {
+      if (lines[i].t <= elapsed + 0.05) { // tolerance for clock sync error (see src/app.jsx)
         idx = i;
       } else {
         break;
@@ -212,7 +235,7 @@
   function sendWsPing() {
     if (ws && ws.readyState === 1) {
       try {
-        ws.send(JSON.stringify({ type: 'ping' }));
+        ws.send(JSON.stringify({ type: 'ping', t0: Date.now() }));
       } catch (e) {}
     }
   }
@@ -277,6 +300,12 @@
       try {
         ws.send(JSON.stringify({ type: 'registerPlayer', playerId: state.playerId }));
       } catch (e) {}
+      // Quick burst of clock sync pings right after connecting
+      clockSamples = [];
+      var delays = [0, 250, 500, 1000, 2000];
+      for (var d = 0; d < delays.length; d++) {
+        setTimeout(sendWsPing, delays[d]);
+      }
     };
 
     ws.onclose = function() {
@@ -305,9 +334,11 @@
           return;
         }
         if (msg.type === 'pong') {
+          if (msg.t0 !== undefined && msg.serverNow !== undefined) recordClockSample(msg.t0, msg.serverNow);
           return;
         }
         if (msg.type === 'state') {
+          if (msg.serverNow && clockSamples.length === 0) serverClockOffset = msg.serverNow - Date.now();
           if (msg.songs) state.songs = msg.songs;
           if (msg.playback) state.playback = msg.playback;
           if (msg.players) state.players = msg.players;
