@@ -218,7 +218,8 @@ wss.on('connection', (ws) => {
     playback: state.playback,
     players: state.players,
     serverIp: getLocalIpAddress(),
-    serverPort: PORT
+    serverPort: PORT,
+    serverNow: Date.now()
   }));
 
   ws.on('message', (raw) => {
@@ -227,7 +228,8 @@ wss.on('connection', (ws) => {
     try { msg = JSON.parse(raw); } catch (e) { return; }
 
     if (msg.type === 'ping') {
-      try { ws.send(JSON.stringify({ type: 'pong' })); } catch (e) {}
+      // Echo the client's send time plus our clock so clients can sync to server time
+      try { ws.send(JSON.stringify({ type: 'pong', t0: msg.t0, serverNow: Date.now() })); } catch (e) {}
       if (boundPlayerId && state.players[boundPlayerId]) {
         state.players[boundPlayerId].lastSeen = Date.now();
       }

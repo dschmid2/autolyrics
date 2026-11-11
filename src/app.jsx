@@ -203,6 +203,10 @@ function getSongDuration(lines) {
   return lastLine.t + dur;
 }
 
+// A line counts as started slightly before its exact timestamp, so a jump to a
+// line is never shown as the previous line because of a few ms of clock error.
+const LINE_START_TOLERANCE = 0.05;
+
 function currentIndex(lines, elapsed) {
   if (!lines || !lines.length) return -1;
   const duration = getSongDuration(lines);
@@ -210,7 +214,7 @@ function currentIndex(lines, elapsed) {
 
   let idx = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].t <= elapsed + 0.001) {
+    if (lines[i].t <= elapsed + LINE_START_TOLERANCE) {
       idx = i;
     } else {
       break;
@@ -500,7 +504,7 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
       songId: songRef.current.id,
       status,
       anchorElapsed: Math.max(0, elapsed),
-      anchorEpoch: Date.now(),
+      anchorEpoch: serverNow(),
     });
   }, [sendPlayback]);
 
@@ -513,7 +517,7 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
           songId: songRef.current.id,
           status: 'stopped',
           anchorElapsed: 0,
-          anchorEpoch: Date.now(),
+          anchorEpoch: serverNow(),
         });
       }
     };
@@ -532,7 +536,7 @@ function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChan
           songId: songRef.current.id,
           status: 'stopped',
           anchorElapsed: 0,
-          anchorEpoch: Date.now(),
+          anchorEpoch: serverNow(),
         });
       }
     }
@@ -970,7 +974,7 @@ function defaultPlayback() {
   return {
     songId: null,
     status: 'stopped',
-    anchorEpoch: Date.now(),
+    anchorEpoch: serverNow(),
     anchorElapsed: 0,
     updatedAt: Date.now(),
     fontSize: 64,
@@ -991,9 +995,34 @@ function defaultPlayback() {
   };
 }
 
+// --- Server clock sync ------------------------------------------------------
+// anchorEpoch is always expressed in *server* time. Every client estimates the
+// offset between its own clock and the server clock (NTP-style, via ping/pong
+// round trips), so devices with skewed clocks still agree on the playback
+// position. Without this, a stage device whose clock runs slightly behind the
+// operator device briefly shows the previous line after a jump.
+let serverClockOffset = 0; // serverTime - localTime in ms
+let clockSamples = [];
+const MAX_CLOCK_SAMPLES = 8;
+
+function serverNow() {
+  return Date.now() + serverClockOffset;
+}
+
+function recordClockSample(t0, serverTime) {
+  const t1 = Date.now();
+  const rtt = t1 - Number(t0);
+  if (!Number.isFinite(rtt) || rtt < 0 || rtt > 10000 || !Number.isFinite(Number(serverTime))) return;
+  clockSamples.push({ rtt, offset: Number(serverTime) + rtt / 2 - t1 });
+  if (clockSamples.length > MAX_CLOCK_SAMPLES) clockSamples.shift();
+  // The sample with the smallest round trip has the smallest error bound
+  const best = clockSamples.reduce((a, b) => (b.rtt < a.rtt ? b : a));
+  serverClockOffset = best.offset;
+}
+
 function computeElapsed(playback) {
   if (playback.status === 'playing') {
-    return playback.anchorElapsed + (Date.now() - playback.anchorEpoch) / 1000;
+    return playback.anchorElapsed + (serverNow() - playback.anchorEpoch) / 1000;
   }
   return playback.anchorElapsed;
 }
@@ -1027,6 +1056,15 @@ function useSyncedState() {
           lastMessageTimeRef.current = Date.now();
           setConnected(true);
           ws.send(JSON.stringify({ type: 'registerPlayer', playerId: playerIdRef.current }));
+          // Quick burst of clock sync pings right after connecting
+          clockSamples = [];
+          [0, 250, 500, 1000, 2000].forEach((delay) => {
+            setTimeout(() => {
+              if (!cancelled && ws.readyState === 1) {
+                try { ws.send(JSON.stringify({ type: 'ping', t0: Date.now() })); } catch (e) {}
+              }
+            }, delay);
+          });
         }
       };
       ws.onclose = () => {
@@ -1044,9 +1082,14 @@ function useSyncedState() {
             try { ws.send(JSON.stringify({ type: 'pong' })); } catch (e) {}
             return;
           }
-          if (msg.type === 'pong') return;
+          if (msg.type === 'pong') {
+            if (msg.t0 !== undefined && msg.serverNow !== undefined) recordClockSample(msg.t0, msg.serverNow);
+            return;
+          }
 
           if (msg.type === 'state') {
+            // Rough first estimate until the first ping/pong round trip arrives
+            if (msg.serverNow && clockSamples.length === 0) serverClockOffset = msg.serverNow - Date.now();
             setSongs(msg.songs);
             setPlayback(msg.playback);
             if (msg.players) setPlayers(msg.players);
@@ -1065,7 +1108,7 @@ function useSyncedState() {
     heartbeatTimer = setInterval(() => {
       if (cancelled) return;
       if (wsRef.current && wsRef.current.readyState === 1) {
-        try { wsRef.current.send(JSON.stringify({ type: 'ping' })); } catch (e) {}
+        try { wsRef.current.send(JSON.stringify({ type: 'ping', t0: Date.now() })); } catch (e) {}
         if (Date.now() - lastMessageTimeRef.current > 35000) {
           try { wsRef.current.close(); } catch (e) {}
         }
@@ -3412,23 +3455,23 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const loadSong = (song) => sendPlayback({ ...playback, songId: song.id, status: 'stopped', anchorEpoch: Date.now(), anchorElapsed: 0 });
+  const loadSong = (song) => sendPlayback({ ...playback, songId: song.id, status: 'stopped', anchorEpoch: serverNow(), anchorElapsed: 0 });
   const togglePlay = () => {
     if (playback.status === 'playing') {
-      sendPlayback({ ...playback, status: 'paused', anchorElapsed: computeElapsed(playback), anchorEpoch: Date.now() });
+      sendPlayback({ ...playback, status: 'paused', anchorElapsed: computeElapsed(playback), anchorEpoch: serverNow() });
     } else {
-      sendPlayback({ ...playback, status: 'playing', anchorEpoch: Date.now() });
+      sendPlayback({ ...playback, status: 'playing', anchorEpoch: serverNow() });
     }
   };
-  const stopSong = () => sendPlayback({ ...playback, status: 'stopped', anchorElapsed: 0, anchorEpoch: Date.now() });
-  const seekTo = (sec) => sendPlayback({ ...playback, anchorElapsed: Math.max(0, sec), anchorEpoch: Date.now() });
+  const stopSong = () => sendPlayback({ ...playback, status: 'stopped', anchorElapsed: 0, anchorEpoch: serverNow() });
+  const seekTo = (sec) => sendPlayback({ ...playback, anchorElapsed: Math.max(0, sec), anchorEpoch: serverNow() });
   const nudge = (delta) => seekTo(computeElapsed(playback) + delta);
   const playFromLine = (sec) => {
     sendPlayback({
       ...playback,
       status: 'playing',
       anchorElapsed: Math.max(0, sec),
-      anchorEpoch: Date.now(),
+      anchorEpoch: serverNow(),
     });
   };
 
