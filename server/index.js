@@ -74,7 +74,8 @@ function defaultPlayback() {
     stageLeadSeconds: 0,
     stageCommentWidthPercent: 20,
     stageLineSpacing: 24,
-    stagePositionY: 0
+    stagePositionY: 0,
+    stageShowTitle: false
   };
 }
 

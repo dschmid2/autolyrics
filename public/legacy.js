@@ -34,7 +34,8 @@
       stageLeadSeconds: 0,
       stageCommentWidthPercent: 20,
       stageLineSpacing: 24,
-      stagePositionY: 0
+      stagePositionY: 0,
+      stageShowTitle: false
     },
     players: {},
     serverVersion: null,
@@ -180,6 +181,17 @@
     var lastLine = lines[lines.length - 1];
     var dur = (lastLine.duration !== null && lastLine.duration !== undefined && lastLine.duration !== '') ? Number(lastLine.duration) : 4;
     return lastLine.t + dur;
+  }
+
+  // Index of the last line whose start time has been reached (ignores durations), or -1
+  function startedIndex(lines, elapsed) {
+    if (!lines || !lines.length) return -1;
+    var idx = -1;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].t <= elapsed + 0.05) idx = i;
+      else break;
+    }
+    return idx;
   }
 
   function currentIndex(lines, elapsed) {
@@ -430,10 +442,14 @@
       stageLastSpacing = stageLineSpacing;
     }
 
+    var stageShowTitle = !!playback.stageShowTitle;
+    // idx = line currently sung (white); currentIdx = line the view is centered on.
+    // Before the first line the view shows line 0 in grey (see src/app.jsx useStageLineState).
     var idx = song ? currentIndex(lines, elapsed + stageLeadSeconds) : -1;
-    var currentIdx = idx >= 0 ? idx : 0;
+    var currentIdx = idx >= 0 ? idx : Math.max(0, song ? startedIndex(lines, elapsed + stageLeadSeconds) : 0);
 
     var lineRowHeight = Math.max(20, Math.round(stageFontSize * 1.2 + stageLineSpacing));
+    var titleBarHeight = stageShowTitle ? Math.round(stageFontSize * 0.5 * 1.2 + 24) : 0;
 
     // Calculate active center offset using measured line heights to prevent downward drift from wrapped lines
     var activeCenterOffset = 0;
@@ -448,7 +464,7 @@
     } else {
       for (var i = 0; i < lines.length; i++) {
         var l = lines[i];
-        var isCurrent = (i === currentIdx);
+        var isCurrent = (i === currentIdx && idx >= 0);
         var isPast = (i < currentIdx);
         var isVisible = (i >= currentIdx - stagePastLines && i <= currentIdx + stageFutureLines);
         var opacity = !isVisible ? '0' : (isCurrent ? '1' : (isPast ? '0.25' : '0.4'));
@@ -489,10 +505,18 @@
     var transformY = 'translateY(-' + activeCenterOffset + 'px)';
     var topPos = (50 + stagePositionY) + '%';
 
+    var titleHtml = '';
+    if (stageShowTitle) {
+      var titlePadding = (commentPercent > 0 && commentPercent < 100) ? 'padding-left: ' + commentPercent + '%;' : '';
+      titleHtml = '  <div style="position: absolute; top: 0; left: 24px; right: 24px; height: ' + titleBarHeight + 'px; box-sizing: border-box; border-bottom: 1px solid #27272a; color: ' + COLORS.stageTextDim + '; font-family: Gelasio, Georgia, serif; font-size: ' + (stageFontSize * 0.5) + 'px; line-height: ' + titleBarHeight + 'px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; ' + titlePadding + '">' +
+        '<span style="padding-left: 20px;">' + escapeHtml(song ? song.title : '') + '</span></div>';
+    }
+
     var html = [
       renderConnectionBadge(),
       '<div id="stage-container" class="legacy-cursor-none" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: ' + COLORS.stageBg + '; overflow: hidden; -webkit-user-select: none; user-select: none;">',
-      '  <div style="position: relative; width: 100%; height: 100%; overflow: hidden; padding: 0 24px; box-sizing: border-box;">',
+      titleHtml,
+      '  <div style="position: absolute; top: ' + titleBarHeight + 'px; left: 0; right: 0; bottom: 0; overflow: hidden; padding: 0 24px; box-sizing: border-box;">',
       verticalDivider,
       '    <div id="stage-scroller" style="width: 100%; position: absolute; left: 0; top: ' + topPos + '; -webkit-transform: ' + transformY + '; transform: ' + transformY + '; -webkit-transition: -webkit-transform 0.5s ease-out; transition: transform 0.5s ease-out;">',
       linesHtml,
