@@ -78,6 +78,25 @@ function defaultPlayback() {
   };
 }
 
+// Stage settings that can be overridden per player (see players[id].stageSettings)
+const PLAYER_STAGE_SETTING_LIMITS = {
+  stageFontSize: [20, 120],
+  stageCommentWidthPercent: [0, 100],
+  stagePositionY: [-50, 50],
+};
+
+function sanitizeStageSettings(input) {
+  const out = {};
+  if (!input || typeof input !== 'object') return out;
+  for (const key of Object.keys(PLAYER_STAGE_SETTING_LIMITS)) {
+    const value = Number(input[key]);
+    if (input[key] === null || input[key] === undefined || input[key] === '' || !Number.isFinite(value)) continue;
+    const [min, max] = PLAYER_STAGE_SETTING_LIMITS[key];
+    out[key] = Math.min(max, Math.max(min, value));
+  }
+  return out;
+}
+
 const DEMO_SONG = {
   id: 'demo-1',
   title: 'Demo-Song (Platzhalter)',
@@ -257,10 +276,11 @@ wss.on('connection', (ws) => {
 
     if (msg.type === 'registerPlayer' && msg.playerId) {
       boundPlayerId = msg.playerId;
-      const existingRole = state.players[boundPlayerId] ? state.players[boundPlayerId].role : null;
+      const existing = state.players[boundPlayerId] || {};
       state.players[boundPlayerId] = {
+        ...existing,
         id: boundPlayerId,
-        role: existingRole || null,
+        role: existing.role || null,
         lastSeen: Date.now(),
         online: true,
       };
@@ -275,6 +295,26 @@ wss.on('connection', (ws) => {
         role: msg.role || null,
         lastSeen: Date.now(),
       };
+      persist();
+      broadcast({ type: 'players', players: state.players });
+    }
+
+    if (msg.type === 'setPlayerName' && msg.playerId && state.players[msg.playerId]) {
+      const name = typeof msg.name === 'string' ? msg.name.replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+      const next = { ...state.players[msg.playerId] };
+      if (name) next.name = name;
+      else delete next.name;
+      state.players[msg.playerId] = next;
+      persist();
+      broadcast({ type: 'players', players: state.players });
+    }
+
+    if (msg.type === 'setPlayerStageSettings' && msg.playerId && state.players[msg.playerId]) {
+      const stageSettings = sanitizeStageSettings(msg.stageSettings);
+      const next = { ...state.players[msg.playerId] };
+      if (Object.keys(stageSettings).length) next.stageSettings = stageSettings;
+      else delete next.stageSettings;
+      state.players[msg.playerId] = next;
       persist();
       broadcast({ type: 'players', players: state.players });
     }

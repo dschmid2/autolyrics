@@ -1027,6 +1027,24 @@ function computeElapsed(playback) {
   return playback.anchorElapsed;
 }
 
+// --- Per-player stage settings ----------------------------------------------
+// A player can override some stage settings (players[id].stageSettings). Keys
+// that are missing fall back to the global value in playback.
+const PLAYER_STAGE_SETTINGS = [
+  { key: 'stageFontSize', label: 'Schriftgrösse', min: 20, max: 120, step: 1, fallback: 64, format: (v) => `${v}px` },
+  { key: 'stageCommentWidthPercent', label: 'Breite Kommentarspalte', min: 0, max: 100, step: 1, fallback: 20, format: (v) => `${v}%` },
+  { key: 'stagePositionY', label: 'Vertikale Position', min: -50, max: 50, step: 1, fallback: 0, format: (v) => `${v > 0 ? '+' : ''}${v}%` },
+];
+
+function applyPlayerStageSettings(playback, stageSettings) {
+  if (!stageSettings) return playback;
+  const merged = { ...playback };
+  PLAYER_STAGE_SETTINGS.forEach(({ key }) => {
+    if (stageSettings[key] !== undefined && stageSettings[key] !== null) merged[key] = stageSettings[key];
+  });
+  return merged;
+}
+
 // --- WebSocket sync -------------------------------------------------------
 
 function useSyncedState() {
@@ -1174,6 +1192,26 @@ function useSyncedState() {
     }
   }, []);
 
+  const sendPlayerName = useCallback((targetPlayerId, name) => {
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'setPlayerName', playerId: targetPlayerId, name }));
+    }
+  }, []);
+
+  const sendPlayerStageSettings = useCallback((targetPlayerId, stageSettings) => {
+    // Optimistic local update, the server broadcasts the sanitized result
+    setPlayers((prev) => {
+      if (!prev[targetPlayerId]) return prev;
+      const next = { ...prev[targetPlayerId] };
+      if (stageSettings && Object.keys(stageSettings).length) next.stageSettings = stageSettings;
+      else delete next.stageSettings;
+      return { ...prev, [targetPlayerId]: next };
+    });
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'setPlayerStageSettings', playerId: targetPlayerId, stageSettings: stageSettings || {} }));
+    }
+  }, []);
+
   const sendDeletePlayer = useCallback((targetPlayerId) => {
     if (wsRef.current && wsRef.current.readyState === 1) {
       wsRef.current.send(JSON.stringify({ type: 'deletePlayer', playerId: targetPlayerId }));
@@ -1189,6 +1227,8 @@ function useSyncedState() {
     sendSongs,
     sendPlayback,
     sendPlayerRole,
+    sendPlayerName,
+    sendPlayerStageSettings,
     sendDeletePlayer,
     serverIp,
     serverPort,
@@ -1471,6 +1511,10 @@ function OptionsView({ playback, onChangePlayback }) {
               </span>
             </div>
 
+            <p className="text-[11px] leading-snug" style={{ color: COLORS.inkDim }}>
+              Grundeinstellungen für alle Stage-Geräte. Schriftgrösse, Kommentarspalte und vertikale Position lassen sich unter „Player-Verwaltung“ pro Gerät übersteuern.
+            </p>
+
             <div className="space-y-1">
               <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
                 <span>Schriftgrösse Stage-View</span>
@@ -1615,7 +1659,7 @@ function VersionBadge({ serverVersion, className = '', style }) {
   );
 }
 
-function UnassignedPlayerView({ playerId, serverVersion }) {
+function UnassignedPlayerView({ playerId, playerName, serverVersion }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center select-none cursor-none" style={{ background: COLORS.stageBg, color: COLORS.stageText }}>
       <div className="max-w-md w-full p-8 rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-2xl space-y-6">
@@ -1633,6 +1677,7 @@ function UnassignedPlayerView({ playerId, serverVersion }) {
         <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Player ID</div>
           <div className="text-lg font-mono font-bold text-amber-400 select-all">{playerId}</div>
+          {playerName && <div className="text-sm font-semibold text-white pt-1">{playerName}</div>}
         </div>
 
         <VersionBadge serverVersion={serverVersion} className="text-zinc-500" />
@@ -2007,7 +2052,130 @@ function ProjectionView({ songs, playback, onExit, connected }) {
   );
 }
 
-function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePlayer }) {
+function PlayerStageSettings({ player, playback, onChange }) {
+  const { colors: COLORS, isDark } = useTheme();
+  const overrides = player.stageSettings || {};
+  const overrideCount = PLAYER_STAGE_SETTINGS.filter(({ key }) => overrides[key] !== undefined).length;
+  const [open, setOpen] = useState(overrideCount > 0);
+
+  const setValue = (key, value) => onChange({ ...overrides, [key]: value });
+  const resetValue = (key) => {
+    const next = { ...overrides };
+    delete next[key];
+    onChange(next);
+  };
+
+  return (
+    <div className="border-t pt-2" style={{ borderColor: COLORS.line }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between text-xs font-medium py-1"
+        style={{ color: COLORS.inkDim }}
+      >
+        <span className="flex items-center gap-1.5">
+          {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          Stage-Einstellungen
+        </span>
+        <span
+          className={`text-[10px] px-1.5 py-0.5 rounded ${overrideCount ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold' : ''}`}
+          style={overrideCount ? undefined : { color: COLORS.inkDim }}
+        >
+          {overrideCount ? `${overrideCount} angepasst` : 'Standard'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="space-y-3 pt-2">
+          {PLAYER_STAGE_SETTINGS.map((field) => {
+            const globalValue = playback[field.key] !== undefined ? playback[field.key] : field.fallback;
+            const isOverridden = overrides[field.key] !== undefined;
+            const value = isOverridden ? overrides[field.key] : globalValue;
+            return (
+              <div key={field.key} className="space-y-1">
+                <div className="flex items-center justify-between text-xs gap-2" style={{ color: COLORS.inkDim }}>
+                  <span>{field.label}</span>
+                  <span className="flex items-center gap-2">
+                    {isOverridden ? (
+                      <>
+                        <span className="font-mono font-semibold" style={{ color: COLORS.ink }}>{field.format(value)}</span>
+                        <button
+                          type="button"
+                          onClick={() => resetValue(field.key)}
+                          className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-zinc-100 hover:bg-zinc-200'}`}
+                          title={`Zurück auf Grundeinstellung (${field.format(globalValue)})`}
+                        >
+                          Standard
+                        </button>
+                      </>
+                    ) : (
+                      <span className="font-mono">{field.format(globalValue)} (Standard)</span>
+                    )}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                  value={value}
+                  onChange={(e) => setValue(field.key, Number(e.target.value))}
+                  className={`w-full accent-amber ${isOverridden ? '' : 'opacity-50'}`}
+                />
+              </div>
+            );
+          })}
+          {overrideCount > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange({})}
+              className="text-[11px] underline"
+              style={{ color: COLORS.inkDim }}
+            >
+              Alle auf Grundeinstellung zurücksetzen
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlayerNameInput({ player, onSave }) {
+  const { colors: COLORS } = useTheme();
+  const [value, setValue] = useState(player.name || '');
+  const [focused, setFocused] = useState(false);
+  // Follow updates from other operators while not editing
+  useEffect(() => {
+    if (!focused) setValue(player.name || '');
+  }, [player.name, focused]);
+
+  const commit = () => {
+    const trimmed = value.replace(/\s+/g, ' ').trim().slice(0, 40);
+    setValue(trimmed);
+    if (trimmed !== (player.name || '')) onSave(trimmed);
+  };
+
+  return (
+    <input
+      type="text"
+      value={value}
+      maxLength={40}
+      placeholder="Gerätename (z. B. iPad links)"
+      onChange={(e) => setValue(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => { setFocused(false); commit(); }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') { setValue(player.name || ''); setTimeout(() => e.target.blur(), 0); }
+      }}
+      className="w-full min-w-0 text-sm font-semibold bg-transparent border-b border-transparent hover:border-current focus:border-amber-500 outline-none py-0.5 placeholder:font-normal placeholder:italic placeholder:opacity-50"
+      style={{ color: COLORS.ink }}
+    />
+  );
+}
+
+function PlayersView({ players = {}, playback = {}, localPlayerId, onSetPlayerRole, onSetPlayerName, onSetPlayerStageSettings, onDeletePlayer }) {
   const { colors: COLORS, isDark } = useTheme();
   const playerList = Object.values(players);
 
@@ -2049,17 +2217,15 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                     className="p-3.5 rounded-lg shadow-sm space-y-3 border"
                     style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
                         <span
-                          className={`w-2.5 h-2.5 rounded-full ${p.online ? 'bg-emerald-500 ring-2 ring-emerald-200' : 'bg-zinc-400'}`}
+                          className={`w-2.5 h-2.5 rounded-full shrink-0 ${p.online ? 'bg-emerald-500 ring-2 ring-emerald-200' : 'bg-zinc-400'}`}
                           title={p.online ? 'Online' : 'Offline'}
                         />
-                        <span className="font-mono text-xs font-bold" style={{ color: COLORS.ink }}>
-                          {p.id}
-                        </span>
+                        <PlayerNameInput player={p} onSave={(name) => onSetPlayerName(p.id, name)} />
                         {isSelf && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                          <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400">
                             Dieses Gerät
                           </span>
                         )}
@@ -2071,6 +2237,9 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                       >
                         <Trash2 size={15} />
                       </button>
+                    </div>
+                    <div className="font-mono text-[10px] -mt-2 pl-[18px] truncate" style={{ color: COLORS.inkDim }} title={p.id}>
+                      {p.id}
                     </div>
 
                     <div className="flex items-center justify-between pt-1">
@@ -2116,6 +2285,12 @@ function PlayersView({ players = {}, localPlayerId, onSetPlayerRole, onDeletePla
                         </button>
                       </div>
                     </div>
+
+                    <PlayerStageSettings
+                      player={p}
+                      playback={playback}
+                      onChange={(stageSettings) => onSetPlayerStageSettings(p.id, stageSettings)}
+                    />
                   </div>
                 );
               })}
@@ -3455,6 +3630,8 @@ export default function App() {
     sendSongs,
     sendPlayback,
     sendPlayerRole,
+    sendPlayerName,
+    sendPlayerStageSettings,
     sendDeletePlayer,
     serverIp,
     serverPort,
@@ -3463,6 +3640,12 @@ export default function App() {
   const elapsed = useElapsed(playback);
 
   const localPlayer = players[playerId] || null;
+  // Stage settings of this device (player) override the global ones
+  const localStageSettingsKey = JSON.stringify((localPlayer && localPlayer.stageSettings) || null);
+  const stagePlayback = useMemo(
+    () => applyPlayerStageSettings(playback, JSON.parse(localStageSettingsKey)),
+    [playback, localStageSettingsKey]
+  );
 
   // Sync state view changes with the browser URL (via history pushState)
   const changeView = (nextView) => {
@@ -3523,14 +3706,14 @@ export default function App() {
         localPlayer && localPlayer.role === 'live' ? (
           <ProjectionView songs={songs} playback={playback} onExit={() => changeView('control')} connected={connected} />
         ) : localPlayer && localPlayer.role === 'stage' ? (
-          <StageView songs={songs} playback={playback} onExit={() => changeView('control')} />
+          <StageView songs={songs} playback={stagePlayback} onExit={() => changeView('control')} />
         ) : (
-          <UnassignedPlayerView playerId={playerId} serverVersion={serverVersion} />
+          <UnassignedPlayerView playerId={playerId} playerName={localPlayer && localPlayer.name} serverVersion={serverVersion} />
         )
       ) : view === 'projection' ? (
         <ProjectionView songs={songs} playback={playback} onExit={() => changeView('control')} connected={connected} />
       ) : view === 'stage' ? (
-        <StageView songs={songs} playback={playback} onExit={() => changeView('control')} />
+        <StageView songs={songs} playback={stagePlayback} onExit={() => changeView('control')} />
       ) : (
         <div className="min-h-screen" style={{ background: colors.panelBg }}>
           <TopMenuBar
@@ -3553,8 +3736,11 @@ export default function App() {
           ) : view === 'players' ? (
             <PlayersView
               players={players}
+              playback={playback}
               localPlayerId={playerId}
               onSetPlayerRole={sendPlayerRole}
+              onSetPlayerName={sendPlayerName}
+              onSetPlayerStageSettings={sendPlayerStageSettings}
               onDeletePlayer={sendDeletePlayer}
             />
           ) : (
