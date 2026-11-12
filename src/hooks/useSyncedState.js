@@ -25,9 +25,12 @@ export function useSyncedState() {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${location.host}/ws`);
       wsRef.current = ws;
+      // Events of a replaced socket (e.g. after a forced reconnect on wake-up)
+      // must be ignored, otherwise its late onclose opens yet another connection
+      const isStale = () => cancelled || wsRef.current !== ws;
 
       ws.onopen = () => {
-        if (!cancelled) {
+        if (!isStale()) {
           lastMessageTimeRef.current = Date.now();
           setConnected(true);
           ws.send(JSON.stringify({ type: 'registerPlayer', playerId: playerIdRef.current }));
@@ -43,13 +46,14 @@ export function useSyncedState() {
         }
       };
       ws.onclose = () => {
-        if (cancelled) return;
+        if (isStale()) return;
         setConnected(false);
         clearTimeout(retryTimer);
         retryTimer = setTimeout(connect, 1500);
       };
       ws.onerror = () => ws.close();
       ws.onmessage = (ev) => {
+        if (isStale()) return;
         lastMessageTimeRef.current = Date.now();
         try {
           const msg = JSON.parse(ev.data);
