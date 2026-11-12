@@ -78,7 +78,7 @@ export function EditorView({ songs, onChangeSongs, playback, sendPlayback }) {
               </div>
             ))}
             </div>
-            <button onClick={addSong} className="w-full text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.stageText }}><Plus size={14} /> Neuer Song</button>
+            <button onClick={addSong} className="w-full text-sm px-3 py-2 rounded-lg flex items-center justify-center gap-1" style={{ background: COLORS.ink, color: COLORS.panelBg }}><Plus size={14} /> Neuer Song</button>
           </div>
           <div className="flex-1 min-w-0">
             {selected ? (
