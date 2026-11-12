@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 import { useTheme } from '../theme';
-import { PLAYER_STAGE_SETTINGS } from '../lib/playback';
+import { PLAYER_STAGE_SETTINGS, getSetting } from '../lib/playback';
 
 export function PlayerStageSettings({ player, playback, onChange }) {
   const { colors: COLORS, isDark } = useTheme();
@@ -39,7 +39,7 @@ export function PlayerStageSettings({ player, playback, onChange }) {
       {open && (
         <div className="space-y-3 pt-2">
           {PLAYER_STAGE_SETTINGS.map((field) => {
-            const globalValue = playback[field.key] !== undefined ? playback[field.key] : field.fallback;
+            const globalValue = getSetting(playback, field.key);
             const isOverridden = overrides[field.key] !== undefined;
             const value = isOverridden ? overrides[field.key] : globalValue;
             return (
@@ -126,6 +126,27 @@ export function PlayerNameInput({ player, onSave }) {
   );
 }
 
+const PLAYER_ROLES = [
+  { role: 'live', label: 'Live' },
+  { role: 'stage', label: 'Stage' },
+  { role: null, label: 'Keine' },
+];
+
+// Role toggle button; `muted` is the subdued style used for "no role"
+function RoleButton({ active, muted, isDark, onClick, children }) {
+  const activeClass = muted
+    ? 'bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold'
+    : 'bg-amber-500 text-black font-bold shadow-sm';
+  const idleClass = isDark
+    ? (muted ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700')
+    : (muted ? 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200');
+  return (
+    <button onClick={onClick} className={`px-3 py-1 rounded text-xs font-medium transition-all ${active ? activeClass : idleClass}`}>
+      {children}
+    </button>
+  );
+}
+
 export function PlayersView({ players = {}, playback = {}, localPlayerId, onSetPlayerRole, onSetPlayerName, onSetPlayerStageSettings, onDeletePlayer }) {
   const { colors: COLORS, isDark } = useTheme();
   const playerList = Object.values(players);
@@ -198,42 +219,17 @@ export function PlayersView({ players = {}, playback = {}, localPlayerId, onSetP
                         Zugewiesene Rolle:
                       </span>
                       <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => onSetPlayerRole(p.id, 'live')}
-                          className={`px-3 py-1 rounded text-xs font-medium transition-all ${
-                            p.role === 'live'
-                              ? 'bg-amber-500 text-black font-bold shadow-sm'
-                              : isDark
-                              ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                              : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-                          }`}
-                        >
-                          Live
-                        </button>
-                        <button
-                          onClick={() => onSetPlayerRole(p.id, 'stage')}
-                          className={`px-3 py-1 rounded text-xs font-medium transition-all ${
-                            p.role === 'stage'
-                              ? 'bg-amber-500 text-black font-bold shadow-sm'
-                              : isDark
-                              ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                              : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-                          }`}
-                        >
-                          Stage
-                        </button>
-                        <button
-                          onClick={() => onSetPlayerRole(p.id, null)}
-                          className={`px-3 py-1 rounded text-xs font-medium transition-all ${
-                            !p.role
-                              ? 'bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold'
-                              : isDark
-                              ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                              : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                          }`}
-                        >
-                          Keine
-                        </button>
+                        {PLAYER_ROLES.map(({ role, label }) => (
+                          <RoleButton
+                            key={label}
+                            active={role ? p.role === role : !p.role}
+                            muted={!role}
+                            isDark={isDark}
+                            onClick={() => onSetPlayerRole(p.id, role)}
+                          >
+                            {label}
+                          </RoleButton>
+                        ))}
                       </div>
                     </div>
 

@@ -2,10 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Pause, Square, SkipBack, SkipForward, Plus, ZoomIn, ZoomOut, Clock, Tv } from 'lucide-react';
 import { COLORS } from '../../theme';
 import { useAudioBuffer } from '../../hooks/useAudioBuffer';
-import { serverNow } from '../../lib/clock';
 import { uid } from '../../lib/ids';
 import { getSongDuration, currentIndex, fmtTimeWithTenths, updateLineTimestamp } from '../../lib/timing';
 import { WaveformCanvas } from './WaveformCanvas';
+import { withAnchor } from '../../lib/playback';
 
 export function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChange, seekRef, playback, sendPlayback }) {
   const { audioBuffer, loading, error } = useAudioBuffer(song.audioUrl);
@@ -96,26 +96,22 @@ export function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackSt
   const syncScreens = useCallback((status, timeSec) => {
     if (!sendToScreensRef.current || !sendPlayback) return;
     const elapsed = timeSec !== undefined ? timeSec : currentTimeRef.current;
-    sendPlayback({
-      ...(playbackRef.current || {}),
+    sendPlayback(withAnchor(playbackRef.current || {}, {
       songId: songRef.current.id,
       status,
       anchorElapsed: Math.max(0, elapsed),
-      anchorEpoch: serverNow(),
-    });
+    }));
   }, [sendPlayback]);
 
   useEffect(() => {
     return () => {
       // If sendToScreens was active when component unmounts, stop screens
       if (sendToScreensRef.current && sendPlayback && playbackRef.current) {
-        sendPlayback({
-          ...playbackRef.current,
+        sendPlayback(withAnchor(playbackRef.current, {
           songId: songRef.current.id,
           status: 'stopped',
           anchorElapsed: 0,
-          anchorEpoch: serverNow(),
-        });
+        }));
       }
     };
   }, [sendPlayback]);
@@ -128,13 +124,11 @@ export function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackSt
       if (nextVal) {
         syncScreens(isPlayingRef.current ? 'playing' : 'paused', currentTimeRef.current);
       } else {
-        sendPlayback({
-          ...(playbackRef.current || {}),
+        sendPlayback(withAnchor(playbackRef.current || {}, {
           songId: songRef.current.id,
           status: 'stopped',
           anchorElapsed: 0,
-          anchorEpoch: serverNow(),
-        });
+        }));
       }
     }
   };

@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 export const THEME_PALETTES = {
   light: {
@@ -45,3 +45,37 @@ export function useTheme() {
 
 // Global fallback for any un-contexted reference
 export const COLORS = THEME_PALETTES.light;
+
+
+function initialTheme() {
+  try {
+    const saved = localStorage.getItem('autolyrics_theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+  } catch (e) {}
+  return 'light';
+}
+
+// Theme state for ThemeContext.Provider: persisted in localStorage and
+// mirrored as `dark` class on <html> (Tailwind darkMode: 'class')
+export function useThemeState() {
+  const [theme, setTheme] = useState(initialTheme);
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('autolyrics_theme', theme);
+    } catch (e) {}
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
+
+  return {
+    theme,
+    isDark: theme === 'dark',
+    toggleTheme,
+    setTheme,
+    colors: THEME_PALETTES[theme] || THEME_PALETTES.light,
+  };
+}

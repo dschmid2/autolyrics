@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { THEME_PALETTES, ThemeContext } from './theme';
+import { useMemo } from 'react';
+import { ThemeContext, useThemeState } from './theme';
 import { ConnectionBadge } from './components/ConnectionBadge';
+import { GlobalStyles } from './components/GlobalStyles';
 import { TopMenuBar } from './components/TopMenuBar';
-import { useElapsed } from './hooks/usePlaybackPosition';
 import { useSyncedState } from './hooks/useSyncedState';
-import { serverNow } from './lib/clock';
-import { computeElapsed, applyPlayerStageSettings } from './lib/playback';
+import { useViewRoute } from './hooks/useViewRoute';
+import { applyPlayerStageSettings } from './lib/playback';
 import { ControlView } from './views/ControlView';
 import { OptionsView } from './views/OptionsView';
 import { PlayersView } from './views/PlayersView';
@@ -15,40 +15,8 @@ import { UnassignedPlayerView } from './views/UnassignedPlayerView';
 import { EditorView } from './views/editor/EditorView';
 
 export default function App() {
-  const [theme, setTheme] = useState(() => {
-    try {
-      const saved = localStorage.getItem('autolyrics_theme');
-      if (saved === 'dark' || saved === 'light') return saved;
-      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
-    } catch (e) {}
-    return 'light';
-  });
-
-  const isDark = theme === 'dark';
-  const colors = THEME_PALETTES[theme] || THEME_PALETTES.light;
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('autolyrics_theme', theme);
-    } catch (e) {}
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [theme]);
-
-  const [view, setView] = useState(() => {
-    const path = window.location.pathname;
-    if (path === '/live') return 'projection';
-    if (path === '/stage') return 'stage';
-    if (path === '/player') return 'player';
-    return 'control';
-  });
-
+  const themeState = useThemeState();
+  const { view, navigate, setSubView } = useViewRoute();
   const {
     songs,
     playback,
@@ -63,7 +31,6 @@ export default function App() {
     sendDeletePlayer,
     serverVersion
   } = useSyncedState();
-  const elapsed = useElapsed(playback);
 
   const localPlayer = players[playerId] || null;
   // Stage settings of this device (player) override the global ones
@@ -73,80 +40,34 @@ export default function App() {
     [playback, localStageSettingsKey]
   );
 
-  // Sync state view changes with the browser URL (via history pushState)
-  const changeView = (nextView) => {
-    setView(nextView);
-    if (nextView === 'projection') {
-      window.history.pushState(null, '', '/live');
-    } else if (nextView === 'stage') {
-      window.history.pushState(null, '', '/stage');
-    } else if (nextView === 'player') {
-      window.history.pushState(null, '', '/player');
-    } else if (nextView === 'control') {
-      window.history.pushState(null, '', '/');
-    }
-  };
+  const exitToControl = () => navigate('control');
+  const projection = <ProjectionView songs={songs} playback={playback} onExit={exitToControl} connected={connected} />;
+  const stage = <StageView songs={songs} playback={stagePlayback} onExit={exitToControl} />;
 
-  useEffect(() => {
-    const handlePopState = () => {
-      const path = window.location.pathname;
-      if (path === '/live') setView('projection');
-      else if (path === '/stage') setView('stage');
-      else if (path === '/player') setView('player');
-      else setView('control');
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  const loadSong = (song) => sendPlayback({ ...playback, songId: song.id, status: 'stopped', anchorEpoch: serverNow(), anchorElapsed: 0 });
-  const togglePlay = () => {
-    if (playback.status === 'playing') {
-      sendPlayback({ ...playback, status: 'paused', anchorElapsed: computeElapsed(playback), anchorEpoch: serverNow() });
-    } else {
-      sendPlayback({ ...playback, status: 'playing', anchorEpoch: serverNow() });
-    }
-  };
-  const stopSong = () => sendPlayback({ ...playback, status: 'stopped', anchorElapsed: 0, anchorEpoch: serverNow() });
-  const seekTo = (sec) => sendPlayback({ ...playback, anchorElapsed: Math.max(0, sec), anchorEpoch: serverNow() });
-  const nudge = (delta) => seekTo(computeElapsed(playback) + delta);
-  const playFromLine = (sec) => {
-    sendPlayback({
-      ...playback,
-      status: 'playing',
-      anchorElapsed: Math.max(0, sec),
-      anchorEpoch: serverNow(),
-    });
-  };
+  // Display devices: /player shows the view of the role the operator assigned
+  let display = null;
+  if (view === 'player') {
+    const role = localPlayer && localPlayer.role;
+    display = role === 'live' ? projection
+      : role === 'stage' ? stage
+      : <UnassignedPlayerView playerId={playerId} playerName={localPlayer && localPlayer.name} serverVersion={serverVersion} />;
+  } else if (view === 'projection') {
+    display = projection;
+  } else if (view === 'stage') {
+    display = stage;
+  }
 
   return (
-    <ThemeContext.Provider value={{ theme, isDark, toggleTheme, setTheme, colors }}>
+    <ThemeContext.Provider value={themeState}>
       <ConnectionBadge connected={connected} />
-      <style>{`
-        .choir-beat-dot { animation-name: choirBeatPulse; animation-timing-function: ease-in-out; animation-iteration-count: infinite; }
-        @keyframes choirBeatPulse { 0% { transform: scale(1); opacity: .15; } 15% { transform: scale(1.8); opacity: .55; } 100% { transform: scale(1); opacity: .15; } }
-        @media (prefers-reduced-motion: reduce) { .choir-beat-dot { animation: none; opacity: .3; } }
-        button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid ${colors.amber}; outline-offset: 2px; }
-      `}</style>
-      {view === 'player' ? (
-        localPlayer && localPlayer.role === 'live' ? (
-          <ProjectionView songs={songs} playback={playback} onExit={() => changeView('control')} connected={connected} />
-        ) : localPlayer && localPlayer.role === 'stage' ? (
-          <StageView songs={songs} playback={stagePlayback} onExit={() => changeView('control')} />
-        ) : (
-          <UnassignedPlayerView playerId={playerId} playerName={localPlayer && localPlayer.name} serverVersion={serverVersion} />
-        )
-      ) : view === 'projection' ? (
-        <ProjectionView songs={songs} playback={playback} onExit={() => changeView('control')} connected={connected} />
-      ) : view === 'stage' ? (
-        <StageView songs={songs} playback={stagePlayback} onExit={() => changeView('control')} />
-      ) : (
-        <div className="min-h-screen" style={{ background: colors.panelBg }}>
+      <GlobalStyles />
+      {display || (
+        <div className="min-h-screen" style={{ background: themeState.colors.panelBg }}>
           <TopMenuBar
             activeView={view}
-            onNavigate={(next) => setView(next)}
-            onGotoProjection={() => changeView('projection')}
-            onGotoStage={() => changeView('stage')}
+            onNavigate={setSubView}
+            onGotoProjection={() => navigate('projection')}
+            onGotoStage={() => navigate('stage')}
             playersCount={Object.keys(players).length}
             serverVersion={serverVersion}
           />
@@ -170,17 +91,7 @@ export default function App() {
               onDeletePlayer={sendDeletePlayer}
             />
           ) : (
-            <ControlView
-              songs={songs}
-              playback={playback}
-              elapsed={elapsed}
-              onLoad={loadSong}
-              onTogglePlay={togglePlay}
-              onStop={stopSong}
-              onSeek={playFromLine}
-              onPlayFromLine={playFromLine}
-              onNudge={nudge}
-            />
+            <ControlView songs={songs} playback={playback} sendPlayback={sendPlayback} />
           )}
         </div>
       )}

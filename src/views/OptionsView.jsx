@@ -1,20 +1,22 @@
 import { Sun, Moon } from 'lucide-react';
 import { useTheme } from '../theme';
+import { getSetting } from '../lib/playback';
+import { RangeSetting } from '../components/form/RangeSetting';
 
 export function OptionsView({ playback, onChangePlayback }) {
   const { colors: COLORS, theme, setTheme } = useTheme();
-  const fontSize = playback.fontSize !== undefined ? playback.fontSize : 64;
-  const translationPercent = playback.translationPercent !== undefined ? playback.translationPercent : 60;
-  const translationSpacing = playback.translationSpacing !== undefined ? playback.translationSpacing : 24;
-  const positionX = playback.positionX !== undefined ? playback.positionX : 50;
-  const positionY = playback.positionY !== undefined ? playback.positionY : 50;
-  const liveWidthPercent = playback.liveWidthPercent !== undefined ? playback.liveWidthPercent : 100;
+  const fontSize = getSetting(playback, 'fontSize');
+  const translationPercent = getSetting(playback, 'translationPercent');
+  const translationSpacing = getSetting(playback, 'translationSpacing');
+  const positionX = getSetting(playback, 'positionX');
+  const positionY = getSetting(playback, 'positionY');
+  const liveWidthPercent = getSetting(playback, 'liveWidthPercent');
   const liveTextAlign = playback.liveTextAlign || 'center';
-  const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
-  const stagePastLines = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
-  const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
-  const stageLeadSeconds = playback.stageLeadSeconds !== undefined ? playback.stageLeadSeconds : 0;
-  const stagePositionY = playback.stagePositionY !== undefined ? playback.stagePositionY : 0;
+  const showHeartbeat = getSetting(playback, 'showHeartbeat');
+  const stagePastLines = getSetting(playback, 'stagePastLines');
+  const stageFutureLines = getSetting(playback, 'stageFutureLines');
+  const stageLeadSeconds = getSetting(playback, 'stageLeadSeconds');
+  const stagePositionY = getSetting(playback, 'stagePositionY');
 
   return (
     <div className="min-h-screen pb-10" style={{ background: COLORS.panelBg }}>
@@ -74,96 +76,60 @@ export function OptionsView({ playback, onChangePlayback }) {
               </span>
             </div>
 
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Schriftgrösse Projektion</span>
-                <span className="font-mono">{fontSize}px</span>
-              </div>
-              <input
-                type="range"
-                min="20"
-                max="120"
-                value={fontSize}
-                onChange={(e) => onChangePlayback({ fontSize: Number(e.target.value) })}
-                className="w-full accent-amber"
-              />
-            </div>
+            <RangeSetting
+              label="Schriftgrösse Projektion"
+              value={fontSize}
+              display={`${fontSize}px`}
+              min={20}
+              max={120}
+              onChange={(v) => onChangePlayback({ fontSize: v })}
+            />
 
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Grösse Übersetzung</span>
-                <span className="font-mono">{translationPercent}%</span>
-              </div>
-              <input
-                type="range"
-                min="30"
-                max="100"
-                value={translationPercent}
-                onChange={(e) => onChangePlayback({ translationPercent: Number(e.target.value) })}
-                className="w-full accent-amber"
-              />
-            </div>
+            <RangeSetting
+              label="Grösse Übersetzung"
+              value={translationPercent}
+              display={`${translationPercent}%`}
+              min={30}
+              max={100}
+              onChange={(v) => onChangePlayback({ translationPercent: v })}
+            />
 
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Abstand zwischen Text und Übersetzung</span>
-                <span className="font-mono">{translationSpacing}px</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={translationSpacing}
-                onChange={(e) => onChangePlayback({ translationSpacing: Number(e.target.value) })}
-                className="w-full accent-amber"
-              />
-            </div>
+            <RangeSetting
+              label="Abstand zwischen Text und Übersetzung"
+              value={translationSpacing}
+              display={`${translationSpacing}px`}
+              min={0}
+              max={100}
+              onChange={(v) => onChangePlayback({ translationSpacing: v })}
+            />
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                  <span>Position X (Zentrum)</span>
-                  <span className="font-mono">{positionX}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={positionX}
-                  onChange={(e) => onChangePlayback({ positionX: Number(e.target.value) })}
-                  className="w-full accent-amber"
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                  <span>Position Y (Zentrum)</span>
-                  <span className="font-mono">{positionY}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={positionY}
-                  onChange={(e) => onChangePlayback({ positionY: Number(e.target.value) })}
-                  className="w-full accent-amber"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Breite Bildbereich</span>
-                <span className="font-mono">{liveWidthPercent}%</span>
-              </div>
-              <input
-                type="range"
-                min="10"
-                max="100"
-                value={liveWidthPercent}
-                onChange={(e) => onChangePlayback({ liveWidthPercent: Number(e.target.value) })}
-                className="w-full accent-amber"
+              <RangeSetting
+                label="Position X (Zentrum)"
+                value={positionX}
+                display={`${positionX}%`}
+                min={0}
+                max={100}
+                onChange={(v) => onChangePlayback({ positionX: v })}
+              />
+              <RangeSetting
+                label="Position Y (Zentrum)"
+                value={positionY}
+                display={`${positionY}%`}
+                min={0}
+                max={100}
+                onChange={(v) => onChangePlayback({ positionY: v })}
               />
             </div>
+
+            <RangeSetting
+              label="Breite Bildbereich"
+              value={liveWidthPercent}
+              display={`${liveWidthPercent}%`}
+              min={10}
+              max={100}
+              onChange={(v) => onChangePlayback({ liveWidthPercent: v })}
+            />
 
             <div className="space-y-1">
               <div className="text-xs" style={{ color: COLORS.inkDim }}>
@@ -230,112 +196,70 @@ export function OptionsView({ playback, onChangePlayback }) {
               />
             </label>
 
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Schriftgrösse Stage-View</span>
-                <span className="font-mono">{playback.stageFontSize !== undefined ? playback.stageFontSize : 64}px</span>
-              </div>
-              <input
-                type="range"
-                min="20"
-                max="120"
-                value={playback.stageFontSize !== undefined ? playback.stageFontSize : 64}
-                onChange={(e) => onChangePlayback({ stageFontSize: Number(e.target.value) })}
-                className="w-full accent-amber"
-              />
-            </div>
+            <RangeSetting
+              label="Schriftgrösse Stage-View"
+              value={getSetting(playback, 'stageFontSize')}
+              display={`${getSetting(playback, 'stageFontSize')}px`}
+              min={20}
+              max={120}
+              onChange={(v) => onChangePlayback({ stageFontSize: v })}
+            />
 
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Zeilenabstand Stage-View</span>
-                <span className="font-mono">{playback.stageLineSpacing !== undefined ? playback.stageLineSpacing : 24}px</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="80"
-                value={playback.stageLineSpacing !== undefined ? playback.stageLineSpacing : 24}
-                onChange={(e) => onChangePlayback({ stageLineSpacing: Number(e.target.value) })}
-                className="w-full accent-amber"
-              />
-            </div>
+            <RangeSetting
+              label="Zeilenabstand Stage-View"
+              value={getSetting(playback, 'stageLineSpacing')}
+              display={`${getSetting(playback, 'stageLineSpacing')}px`}
+              min={0}
+              max={80}
+              onChange={(v) => onChangePlayback({ stageLineSpacing: v })}
+            />
 
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Vertikale Position Stage-View</span>
-                <span className="font-mono">{stagePositionY > 0 ? `+${stagePositionY}` : stagePositionY}%</span>
-              </div>
-              <input
-                type="range"
-                min="-50"
-                max="50"
-                value={stagePositionY}
-                onChange={(e) => onChangePlayback({ stagePositionY: Number(e.target.value) })}
-                className="w-full accent-amber"
-              />
-            </div>
+            <RangeSetting
+              label="Vertikale Position Stage-View"
+              value={stagePositionY}
+              display={<>{stagePositionY > 0 ? `+${stagePositionY}` : stagePositionY}%</>}
+              min={-50}
+              max={50}
+              onChange={(v) => onChangePlayback({ stagePositionY: v })}
+            />
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                  <span>Vergangene Zeilen</span>
-                  <span className="font-mono">{stagePastLines}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="5"
-                  value={stagePastLines}
-                  onChange={(e) => onChangePlayback({ stagePastLines: Number(e.target.value) })}
-                  className="w-full accent-amber"
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                  <span>Zukünftige Zeilen</span>
-                  <span className="font-mono">{stageFutureLines}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="5"
-                  value={stageFutureLines}
-                  onChange={(e) => onChangePlayback({ stageFutureLines: Number(e.target.value) })}
-                  className="w-full accent-amber"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1 pt-1">
-              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Bühnenvorlauf (Sekunden früher)</span>
-                <span className="font-mono">{stageLeadSeconds}s</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="10"
-                step="0.5"
-                value={stageLeadSeconds}
-                onChange={(e) => onChangePlayback({ stageLeadSeconds: Number(e.target.value) })}
-                className="w-full accent-amber"
+              <RangeSetting
+                label="Vergangene Zeilen"
+                value={stagePastLines}
+                min={0}
+                max={5}
+                onChange={(v) => onChangePlayback({ stagePastLines: v })}
+              />
+              <RangeSetting
+                label="Zukünftige Zeilen"
+                value={stageFutureLines}
+                min={0}
+                max={5}
+                onChange={(v) => onChangePlayback({ stageFutureLines: v })}
               />
             </div>
 
-            <div className="space-y-1 pt-1">
-              <div className="flex justify-between text-xs" style={{ color: COLORS.inkDim }}>
-                <span>Breite Kommentarspalte (Stage-View)</span>
-                <span className="font-mono">{playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20}
-                onChange={(e) => onChangePlayback({ stageCommentWidthPercent: Number(e.target.value) })}
-                className="w-full accent-amber"
-              />
-            </div>
+            <RangeSetting
+              label="Bühnenvorlauf (Sekunden früher)"
+              value={stageLeadSeconds}
+              display={`${stageLeadSeconds}s`}
+              min={0}
+              max={10}
+              step={0.5}
+              onChange={(v) => onChangePlayback({ stageLeadSeconds: v })}
+              className="space-y-1 pt-1"
+            />
+
+            <RangeSetting
+              label="Breite Kommentarspalte (Stage-View)"
+              value={getSetting(playback, 'stageCommentWidthPercent')}
+              display={`${getSetting(playback, 'stageCommentWidthPercent')}%`}
+              min={0}
+              max={100}
+              onChange={(v) => onChangePlayback({ stageCommentWidthPercent: v })}
+              className="space-y-1 pt-1"
+            />
           </div>
         </div>
       </div>

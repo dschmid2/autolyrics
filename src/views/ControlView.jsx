@@ -1,29 +1,22 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import { Play, Pause, Square, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../theme';
-import { getBarBeat, sortedLines, getSongDuration, currentIndex, fmtTime } from '../lib/timing';
+import { getBarBeat, getSongDuration, currentIndex, fmtTime } from '../lib/timing';
+import { useCurrentSong } from '../hooks/useCurrentSong';
+import { useElapsed } from '../hooks/usePlaybackPosition';
+import { usePlaybackControls } from '../hooks/usePlaybackControls';
 
-export function ControlView({
-  songs,
-  playback,
-  elapsed,
-  onLoad,
-  onTogglePlay,
-  onStop,
-  onSeek,
-  onNudge,
-  onPlayFromLine,
-}) {
+export function ControlView({ songs, playback, sendPlayback }) {
   const { colors: COLORS, isDark } = useTheme();
-  const song = useMemo(() => songs.find((s) => s.id === playback.songId) || null, [songs, playback.songId]);
-  const lines = useMemo(() => (song ? sortedLines(song) : []), [song]);
+  const elapsed = useElapsed(playback);
+  const { song, lines } = useCurrentSong(songs, playback);
+  const { loadSong, togglePlay, stop, nudge, playFrom } = usePlaybackControls(playback, sendPlayback);
   const idx = song ? currentIndex(lines, elapsed) : -1;
   const duration = getSongDuration(lines);
   const { bar: currentBar, beat: currentBeat } = song
     ? getBarBeat(elapsed, song.bpm, song.timeSigNum)
     : { bar: 1, beat: 1 };
 
-  const handleLineClick = onPlayFromLine || onSeek;
   const activeLineRef = useRef(null);
 
   // Auto-scroll active lyric line into view if it changes
@@ -64,7 +57,7 @@ export function ControlView({
             {/* Main Playback Buttons */}
             <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap justify-center">
               <button
-                onClick={() => onNudge(-5)}
+                onClick={() => nudge(-5)}
                 disabled={!song}
                 aria-label="5 Sekunden zurück"
                 className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
@@ -76,7 +69,7 @@ export function ControlView({
               </button>
 
               <button
-                onClick={() => onNudge(-1)}
+                onClick={() => nudge(-1)}
                 disabled={!song}
                 aria-label="1 Sekunde zurück"
                 className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
@@ -88,7 +81,7 @@ export function ControlView({
               </button>
 
               <button
-                onClick={onTogglePlay}
+                onClick={togglePlay}
                 disabled={!song}
                 aria-label={playback.status === 'playing' ? 'Pause und Schwarz' : 'Start'}
                 className="p-3.5 sm:p-5 rounded-full shadow-md hover:scale-105 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none"
@@ -103,7 +96,7 @@ export function ControlView({
               </button>
 
               <button
-                onClick={() => onNudge(1)}
+                onClick={() => nudge(1)}
                 disabled={!song}
                 aria-label="1 Sekunde vor"
                 className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
@@ -115,7 +108,7 @@ export function ControlView({
               </button>
 
               <button
-                onClick={() => onNudge(5)}
+                onClick={() => nudge(5)}
                 disabled={!song}
                 aria-label="5 Sekunden vor"
                 className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
@@ -127,7 +120,7 @@ export function ControlView({
               </button>
 
               <button
-                onClick={onStop}
+                onClick={stop}
                 disabled={!song}
                 className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition hover:opacity-80 active:scale-95 disabled:opacity-30 disabled:pointer-events-none border"
                 style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.inkDim }}
@@ -144,7 +137,7 @@ export function ControlView({
                     const currentIdx = songs.findIndex((s) => s.id === playback.songId);
                     if (currentIdx !== -1) {
                       const nextIdx = (currentIdx + 1) % songs.length;
-                      onLoad(songs[nextIdx]);
+                      loadSong(songs[nextIdx]);
                     }
                   }}
                   className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition hover:opacity-90 active:scale-95"
@@ -205,7 +198,7 @@ export function ControlView({
                 return (
                   <button
                     key={s.id}
-                    onClick={() => onLoad(s)}
+                    onClick={() => loadSong(s)}
                     className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all border ${
                       isSelected
                         ? 'shadow-md font-bold border-amber-500/50'
@@ -261,7 +254,7 @@ export function ControlView({
                     <button
                       key={l.id}
                       ref={isActive ? activeLineRef : null}
-                      onClick={() => handleLineClick(l.t)}
+                      onClick={() => playFrom(l.t)}
                       className={`w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all border ${
                         isActive
                           ? 'shadow-md scale-[1.01] border-amber-500/50'

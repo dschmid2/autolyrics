@@ -5,6 +5,8 @@ const fs = require('fs');
 const os = require('os');
 const multer = require('multer');
 const { WebSocketServer } = require('ws');
+const { createDefaultPlayback } = require('../shared/playbackDefaults');
+const { sanitizeStageSettings } = require('../shared/stageSettings');
 
 const PORT = process.env.PORT || 8080;
 
@@ -53,50 +55,7 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 }
 });
 
-function defaultPlayback() {
-  return {
-    songId: null,
-    status: 'stopped',
-    anchorEpoch: Date.now(),
-    anchorElapsed: 0,
-    updatedAt: Date.now(),
-    fontSize: 64,
-    stageFontSize: 64,
-    translationPercent: 60,
-    translationSpacing: 24,
-    positionX: 50,
-    positionY: 50,
-    liveWidthPercent: 100,
-    liveTextAlign: 'center',
-    showHeartbeat: true,
-    stagePastLines: 2,
-    stageFutureLines: 2,
-    stageLeadSeconds: 0,
-    stageCommentWidthPercent: 20,
-    stageLineSpacing: 24,
-    stagePositionY: 0,
-    stageShowTitle: false
-  };
-}
 
-// Stage settings that can be overridden per player (see players[id].stageSettings)
-const PLAYER_STAGE_SETTING_LIMITS = {
-  stageFontSize: [20, 120],
-  stageCommentWidthPercent: [0, 100],
-  stagePositionY: [-50, 50],
-};
-
-function sanitizeStageSettings(input) {
-  const out = {};
-  if (!input || typeof input !== 'object') return out;
-  for (const key of Object.keys(PLAYER_STAGE_SETTING_LIMITS)) {
-    const value = Number(input[key]);
-    if (input[key] === null || input[key] === undefined || input[key] === '' || !Number.isFinite(value)) continue;
-    const [min, max] = PLAYER_STAGE_SETTING_LIMITS[key];
-    out[key] = Math.min(max, Math.max(min, value));
-  }
-  return out;
-}
 
 const DEMO_SONG = {
   id: 'demo-1',
@@ -167,7 +126,7 @@ function loadState() {
 
   return {
     songs: songs !== null ? songs : [DEMO_SONG],
-    playback: playback !== null ? playback : defaultPlayback(),
+    playback: playback !== null ? playback : createDefaultPlayback(Date.now(), Date.now()),
     players: players !== null ? players : {},
   };
 }

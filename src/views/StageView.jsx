@@ -1,34 +1,30 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Maximize2, X } from 'lucide-react';
 import { COLORS } from '../theme';
 import { useStageLineState } from '../hooks/usePlaybackPosition';
-import { sortedLines } from '../lib/timing';
+import { getSetting } from '../lib/playback';
+import { BeatDot } from '../components/display/BeatDot';
+import { useCurrentSong } from '../hooks/useCurrentSong';
+import { useFullscreen } from '../hooks/useFullscreen';
 
 export function StageView({ songs, playback, onExit }) {
-  const song = useMemo(() => songs.find((s) => s.id === playback.songId) || null, [songs, playback.songId]);
-  const lines = useMemo(() => (song ? sortedLines(song) : []), [song]);
-  const stageLeadSeconds = playback.stageLeadSeconds !== undefined ? playback.stageLeadSeconds : 0;
-  const stagePastLines = playback.stagePastLines !== undefined ? playback.stagePastLines : 2;
-  const stageFutureLines = playback.stageFutureLines !== undefined ? playback.stageFutureLines : 2;
-  const stageLineSpacing = playback.stageLineSpacing !== undefined ? playback.stageLineSpacing : 24;
-  const stagePositionY = playback.stagePositionY !== undefined ? playback.stagePositionY : 0;
+  const { song, lines } = useCurrentSong(songs, playback);
+  const stageLeadSeconds = getSetting(playback, 'stageLeadSeconds');
+  const stagePastLines = getSetting(playback, 'stagePastLines');
+  const stageFutureLines = getSetting(playback, 'stageFutureLines');
+  const stageLineSpacing = getSetting(playback, 'stageLineSpacing');
+  const stagePositionY = getSetting(playback, 'stagePositionY');
   const { activeIdx, positionIdx: currentIdx } = useStageLineState(lines, playback, stageLeadSeconds);
 
-  const stageFontSize = playback.stageFontSize !== undefined ? playback.stageFontSize : 64;
+  const stageFontSize = getSetting(playback, 'stageFontSize');
   const stageShowTitle = !!playback.stageShowTitle;
-  const showHeartbeat = playback.showHeartbeat !== undefined ? playback.showHeartbeat : true;
-  const commentPercent = playback.stageCommentWidthPercent !== undefined ? playback.stageCommentWidthPercent : 20;
+  const showHeartbeat = getSetting(playback, 'showHeartbeat');
+  const commentPercent = getSetting(playback, 'stageCommentWidthPercent');
 
-  const pulseDuration = song ? 60 / (song.bpm || 60) : 1;
-  const containerRef = useRef(null);
+  const [containerRef, requestFs] = useFullscreen();
   const lineRefs = useRef([]);
   const [activeCenterOffset, setActiveCenterOffset] = useState(0);
 
-  const requestFs = () => {
-    if (containerRef.current && containerRef.current.requestFullscreen) {
-      containerRef.current.requestFullscreen().catch(() => {});
-    }
-  };
 
   const measuredHeightsRef = useRef({});
   const prevSongIdRef = useRef(song?.id);
@@ -241,7 +237,7 @@ export function StageView({ songs, playback, onExit }) {
       </div>
 
       {song && playback.status === 'playing' && showHeartbeat && (
-        <div className="fixed bottom-6 right-6 w-3 h-3 rounded-full choir-beat-dot" style={{ background: COLORS.amber, animationDuration: `${pulseDuration}s` }} />
+        <BeatDot bpm={song.bpm} />
       )}
 
       {/* Unsichtbarer Zurück-Knopf oben rechts, wird bei Hover/Focus leicht sichtbar */}
