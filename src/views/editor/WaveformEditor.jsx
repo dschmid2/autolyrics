@@ -226,16 +226,14 @@ export function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackSt
   const activeIdx = currentIndex(computedLines, currentTime);
   const activeLine = activeIdx >= 0 ? computedLines[activeIdx] : null;
 
+  // Report only play state and the active line (by id) to the parent, so the
+  // parent re-renders on changes and not on every animation frame
+  const activeLineId = activeLine ? activeLine.id : null;
   useEffect(() => {
     if (onPlaybackStateChange) {
-      onPlaybackStateChange({
-        isPlaying,
-        currentTime,
-        activeIdx,
-        activeLineId: activeLine ? activeLine.id : null,
-      });
+      onPlaybackStateChange({ isPlaying, activeLineId });
     }
-  }, [onPlaybackStateChange, isPlaying, currentTime, activeIdx, activeLine]);
+  }, [onPlaybackStateChange, isPlaying, activeLineId]);
 
   const handleContainerClick = (e) => {
     if (isDragging) return;

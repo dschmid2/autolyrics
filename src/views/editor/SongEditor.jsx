@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { ChevronUp, ChevronDown, Plus, Trash2, Upload, Music } from 'lucide-react';
 import { useTheme } from '../../theme';
 import { uid } from '../../lib/ids';
@@ -10,7 +10,8 @@ export function SongEditor({ song, onChange, onDelete, playback, sendPlayback })
   const { colors: COLORS, isDark } = useTheme();
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
-  const [waveformPlayback, setWaveformPlayback] = useState({ isPlaying: false, currentTime: 0, activeIdx: -1, activeLineId: null });
+  // Reported by WaveformEditor: only what this view needs, so it re-renders on changes only
+  const [waveformPlayback, setWaveformPlayback] = useState({ isPlaying: false, activeLineId: null });
   const waveformSeekRef = useRef(null);
   const activeLineRowRef = useRef(null);
 
@@ -146,7 +147,8 @@ export function SongEditor({ song, onChange, onDelete, playback, sendPlayback })
     update({ lines: next });
   };
 
-  const computedLines = computeLinesWithTimes(song);
+  // Memoized: WaveformEditor depends on its identity (a new array per render caused a render loop)
+  const computedLines = useMemo(() => computeLinesWithTimes(song), [song]);
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];

@@ -81,6 +81,7 @@ scripts/generate-version.js  Writes src/version.json + public/version.json
 * `App.jsx` only wires things together. Put new screens in `src/views/`, reusable UI in `src/components/`, React state logic in `src/hooks/` and pure logic in `src/lib/` (or `shared/` if the server needs it too).
 * `shared/` modules must stay plain CommonJS without dependencies (the server `require`s them; esbuild bundles them for the client). The Docker runtime stage copies `shared/` next to `server/`.
 * Views that need the playback position call `useElapsed()` themselves; do not lift it into `App` (it re-renders every 100 ms while playing).
+* Avoid render loops: values passed to children or used as effect dependencies must be stable (`useMemo` for derived arrays/objects such as `computeLinesWithTimes(song)`), and child→parent reports via `useEffect` should send primitive values (ids, booleans) only. Expected render rates while playing: control view 10/s, live/stage only on line changes, editor waveform 60/s (only `WaveformEditor`/`WaveformCanvas`), everything else 0.
 
 ### Versioning Mechanism
 * Version format: `<major>.<minor>.<build>`.
