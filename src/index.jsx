@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import App from './app.jsx';
+import App from './App.jsx';
 
 window.__autolyrics_loaded = true;
 const root = createRoot(document.getElementById('root'));

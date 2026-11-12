@@ -93,7 +93,7 @@
     }
   }
 
-  // --- Server clock sync (anchorEpoch is in server time, see src/app.jsx) ---
+  // --- Server clock sync (anchorEpoch is in server time, see src/lib/clock.js) ---
   var serverClockOffset = 0; // serverTime - localTime in ms
   var clockSamples = [];
   var MAX_CLOCK_SAMPLES = 8;
@@ -201,7 +201,7 @@
 
     var idx = -1;
     for (var i = 0; i < lines.length; i++) {
-      if (lines[i].t <= elapsed + 0.05) { // tolerance for clock sync error (see src/app.jsx)
+      if (lines[i].t <= elapsed + 0.05) { // tolerance for clock sync error (see LINE_START_TOLERANCE in src/lib/timing.js)
         idx = i;
       } else {
         break;
@@ -444,7 +444,7 @@
 
     var stageShowTitle = !!playback.stageShowTitle;
     // idx = line currently sung (white); currentIdx = line the view is centered on.
-    // Before the first line the view shows line 0 in grey (see src/app.jsx useStageLineState).
+    // Before the first line the view shows line 0 in grey (see useStageLineState in src/hooks/usePlaybackPosition.js).
     var idx = song ? currentIndex(lines, elapsed + stageLeadSeconds) : -1;
     var currentIdx = idx >= 0 ? idx : Math.max(0, song ? startedIndex(lines, elapsed + stageLeadSeconds) : 0);
 

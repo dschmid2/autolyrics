@@ -91,9 +91,15 @@ autolyrics/
 │   └── generate-version.js # Generiert src/version.json und public/version.json
 ├── server/
 │   └── index.js           # Express- und WebSocket-Server
+├── shared/                # Von Server und Client gemeinsam genutzt (Standardwerte, Geräte-Einstellungen)
 ├── src/
-│   ├── app.jsx            # Haupt-React-Anwendung mit allen Views & Logik
+│   ├── App.jsx            # Wurzelkomponente: Theme, Routing, Auswahl der Ansicht
 │   ├── index.jsx          # React DOM Rendering Einstiegspunkt
+│   ├── theme.js           # Farbpaletten & Hell/Dunkel-Modus
+│   ├── views/             # Eine Datei pro Ansicht (Steuerung, Live, Stage, Player, Optionen, Editor/…)
+│   ├── components/        # Wiederverwendbare UI-Bausteine
+│   ├── hooks/             # React-Hooks (WebSocket-Sync, Wiedergabeposition, Routing, …)
+│   ├── lib/               # Reine Logik ohne React (Zeitberechnung, Uhrsynchronisierung, …)
 │   ├── styles.css         # Tailwind-Quelldatei
 │   └── version.json       # Generierte Versionsdatei (nicht eingecheckt)
 ├── Dockerfile             # Container-Build-Anweisung

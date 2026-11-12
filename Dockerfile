@@ -21,6 +21,7 @@ COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 
 COPY server ./server
+COPY shared ./shared
 COPY --from=build /app/public ./public
 
 VOLUME ["/data"]
