@@ -294,14 +294,23 @@
     var proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
     var wsUrl = proto + '://' + window.location.host + '/ws';
 
+    var socket;
     try {
-      ws = new WebSocket(wsUrl);
+      socket = new WebSocket(wsUrl);
     } catch (e) {
       reconnectTimer = setTimeout(connectWebSocket, 2000);
       return;
     }
+    ws = socket;
 
-    ws.onopen = function() {
+    // Events of a replaced socket (e.g. after a forced reconnect on wake-up)
+    // must be ignored, otherwise its late onclose opens yet another connection
+    function isStale() {
+      return socket !== ws;
+    }
+
+    socket.onopen = function() {
+      if (isStale()) return;
       state.connected = true;
       lastMessageTime = Date.now();
       if (blackoutTimer) {
@@ -321,7 +330,8 @@
       }
     };
 
-    ws.onclose = function() {
+    socket.onclose = function() {
+      if (isStale()) return;
       state.connected = false;
       render();
       if (!blackoutTimer) {
@@ -334,11 +344,12 @@
       reconnectTimer = setTimeout(connectWebSocket, 1500);
     };
 
-    ws.onerror = function() {
-      try { ws.close(); } catch (e) {}
+    socket.onerror = function() {
+      try { socket.close(); } catch (e) {}
     };
 
-    ws.onmessage = function(ev) {
+    socket.onmessage = function(ev) {
+      if (isStale()) return;
       lastMessageTime = Date.now();
       try {
         var msg = JSON.parse(ev.data);
@@ -379,6 +390,17 @@
 
   // --- View Renderers ---
 
+  // Writes the view into the DOM only if it changed. Rebuilding the DOM 60
+  // times per second while playing caused memory pressure and page reloads
+  // ("Ein Problem ist aufgetreten") on older iPads.
+  var lastRootHtml = null;
+  function setRootHtml(html) {
+    if (html === lastRootHtml) return false;
+    lastRootHtml = html;
+    rootEl.innerHTML = html;
+    return true;
+  }
+
   function renderConnectionBadge() {
     if (state.connected) return '';
     return '<div class="legacy-connection-badge">Keine Verbindung zum Server – versuche erneut zu verbinden…</div>';
@@ -416,7 +438,7 @@
       '  </div>',
       '</div>'
     ].join('\n');
-    rootEl.innerHTML = html;
+    if (!setRootHtml(html)) return;
   }
 
   var stageMeasuredHeights = {};
@@ -527,7 +549,7 @@
       '</div>'
     ].join('\n');
 
-    rootEl.innerHTML = html;
+    if (!setRootHtml(html)) return;
 
     // Cache rendered line element heights and adjust scroller transform from real DOM measurements
     if (lines.length > 0) {
@@ -552,7 +574,7 @@
     var fsBtn = document.getElementById('legacy-fs-btn');
     if (fsBtn) {
       fsBtn.onclick = function() {
-        requestFullscreen(document.getElementById('stage-container'));
+        requestFullscreen(document.documentElement); // not the container: it is replaced when the view changes
       };
     }
   }
@@ -602,12 +624,12 @@
       '</div>'
     ].join('\n');
 
-    rootEl.innerHTML = html;
+    if (!setRootHtml(html)) return;
 
     var fsBtn = document.getElementById('legacy-fs-btn');
     if (fsBtn) {
       fsBtn.onclick = function() {
-        requestFullscreen(document.getElementById('projection-container'));
+        requestFullscreen(document.documentElement); // not the container: it is replaced when the view changes
       };
     }
   }
@@ -630,7 +652,7 @@
       '  </div>',
       '</div>'
     ].join('\n');
-    rootEl.innerHTML = html;
+    if (!setRootHtml(html)) return;
   }
 
   function sortedLines(song) {
@@ -686,15 +708,11 @@
     }
   }
 
-  // Animation / update loop
-  function loop() {
+  // Update loop: while playing, check 10x per second whether the view changed
+  // (render() only touches the DOM when its HTML differs)
+  function tick() {
     if (state.playback && state.playback.status === 'playing') {
       render();
-    }
-    if (window.requestAnimationFrame) {
-      window.requestAnimationFrame(loop);
-    } else {
-      setTimeout(loop, 100);
     }
   }
 
@@ -706,16 +724,13 @@
   // Handle window resize / iPad orientation change
   window.addEventListener('resize', function() {
     stageMeasuredHeights = {};
+    lastRootHtml = null; // force re-render and re-measuring of line heights
     render();
   });
 
   // Start WebSocket and Loop
   connectWebSocket();
   render();
-  if (window.requestAnimationFrame) {
-    window.requestAnimationFrame(loop);
-  } else {
-    setInterval(loop, 100);
-  }
+  setInterval(tick, 100);
 
 })();

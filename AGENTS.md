@@ -69,6 +69,7 @@ scripts/generate-version.js  Writes src/version.json + public/version.json
 ### Keep Modern and Legacy Clients in Sync
 * Display-related changes to `ProjectionView`, `StageView` or `UnassignedPlayerView` (new playback settings, layout changes, line semantics) usually need an equivalent change in `public/legacy.js`.
 * `legacy.js` must stay strict ES5: no arrow functions, `let`/`const`, template literals, classes, spread, or modern DOM APIs without vendor fallbacks.
+* `legacy.js` renders by building an HTML string per view and writing it via `setRootHtml()`, which skips the DOM write when the HTML is unchanged. Never assign `rootEl.innerHTML` directly and never add a per-frame loop: the update loop is a single `setInterval(tick, 100)`. Rebuilding the DOM every frame made older iPads reload the page ("Ein Problem ist aufgetreten"). Request fullscreen on `document.documentElement`, not on a view container (it gets replaced).
 * `public/index.html` decides which client to load (capability checks + user agent). It can be forced with `?legacy=1` or `?modern=1`, and it falls back to `legacy.js` if the bundle throws during startup.
 
 ### Keep Defaults in Sync
@@ -220,6 +221,7 @@ Application data is separated into three distinct JSON files. Writes are debounc
   * `{ type: 'setPlayback', playback }` (replaces the full playback object)
   * `{ type: 'ping', t0 }` (`t0` = client `Date.now()`; sent every 10 s and in a short burst after connecting) / `{ type: 'pong' }`
 * **Broadcast rules**: `songs` and `playback` updates are broadcast to all clients **except the sender** (the sender updates optimistically); `players` updates go to everyone. The server overwrites `updatedAt` on `setPlayback`.
+* **One socket per client**: both clients ignore events of a replaced socket (`isStale()` in `useSyncedState` / `legacy.js`). Without this, a forced reconnect on wake-up let the old socket's late `onclose` open an additional connection each time.
 * **Keepalive**: The server sends WS pings plus a JSON `ping` every 15 s and terminates unresponsive sockets. Clients send a JSON `ping` every 10 s, force-reconnect if nothing was received for 35 s, and also reconnect on `visibilitychange`, `pageshow`, `focus` and `online` (important for iPads waking from sleep).
 * **No authentication**: any client on the network can change songs and playback. The app is meant for trusted local networks.
 
