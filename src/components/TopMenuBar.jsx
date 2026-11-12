@@ -68,7 +68,7 @@ export function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoSta
           <button
             onClick={onGotoProjection}
             className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
-            style={{ background: COLORS.ink, color: COLORS.stageText }}
+            style={{ background: COLORS.ink, color: COLORS.panelBg }}
             title="Projektionsansicht (/live) öffnen"
           >
             <Eye size={14} />
@@ -77,7 +77,7 @@ export function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoSta
           <button
             onClick={onGotoStage}
             className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90"
-            style={{ background: COLORS.ink, color: COLORS.stageText }}
+            style={{ background: COLORS.ink, color: COLORS.panelBg }}
             title="Stageview-Ansicht (/stage) öffnen"
           >
             <Tv size={14} />

@@ -34,7 +34,7 @@ export function OptionsView({ playback, onChangePlayback }) {
               onClick={() => setTheme('light')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 theme === 'light'
-                  ? 'bg-amber text-zinc-950 font-bold shadow-sm'
+                  ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm'
                   : 'hover:opacity-100 opacity-80'
               }`}
               style={{
@@ -50,7 +50,7 @@ export function OptionsView({ playback, onChangePlayback }) {
               onClick={() => setTheme('dark')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 theme === 'dark'
-                  ? 'bg-amber text-zinc-950 font-bold shadow-sm'
+                  ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm'
                   : 'hover:opacity-100 opacity-80'
               }`}
               style={{
@@ -147,9 +147,10 @@ export function OptionsView({ playback, onChangePlayback }) {
                     onClick={() => onChangePlayback({ liveTextAlign: value })}
                     className={`flex-1 py-1.5 px-3 text-xs rounded-lg font-medium transition-colors ${
                       liveTextAlign === value
-                        ? 'bg-amber text-zinc-950 font-bold'
+                        ? 'text-zinc-950 font-bold'
                         : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                     }`}
+                    style={liveTextAlign === value ? { background: COLORS.amber } : undefined}
                   >
                     {label}
                   </button>

@@ -1,21 +1,19 @@
 import { useEffect, useRef } from 'react';
 import { Play, Pause, Square, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '../theme';
-import { getBarBeat, getSongDuration, currentIndex, fmtTime } from '../lib/timing';
+import { getSongDuration, fmtTime } from '../lib/timing';
 import { useCurrentSong } from '../hooks/useCurrentSong';
-import { useElapsed } from '../hooks/usePlaybackPosition';
+import { useLineIndex } from '../hooks/usePlaybackPosition';
+import { PlaybackClock } from './control/PlaybackClock';
 import { usePlaybackControls } from '../hooks/usePlaybackControls';
 
 export function ControlView({ songs, playback, sendPlayback }) {
   const { colors: COLORS, isDark } = useTheme();
-  const elapsed = useElapsed(playback);
   const { song, lines } = useCurrentSong(songs, playback);
   const { loadSong, togglePlay, stop, nudge, playFrom } = usePlaybackControls(playback, sendPlayback);
-  const idx = song ? currentIndex(lines, elapsed) : -1;
+  // Re-renders only when the active line changes; the running time is in PlaybackClock
+  const idx = useLineIndex(lines, playback, 0);
   const duration = getSongDuration(lines);
-  const { bar: currentBar, beat: currentBeat } = song
-    ? getBarBeat(elapsed, song.bpm, song.timeSigNum)
-    : { bar: 1, beat: 1 };
 
   const activeLineRef = useRef(null);
 
@@ -160,14 +158,7 @@ export function ControlView({ songs, playback, sendPlayback }) {
                 <span className="text-xs uppercase tracking-wider font-semibold opacity-70" style={{ color: COLORS.line }}>
                   {playback.status === 'playing' ? 'Aktuelle Zeile (Live)' : 'Status'}
                 </span>
-                <div
-                  className="font-mono text-sm sm:text-base font-bold px-3 py-1 rounded-lg shadow-sm flex items-center gap-2"
-                  style={{ background: isDark ? '#1C1C22' : COLORS.panelBg, color: COLORS.ink }}
-                >
-                  <span>{fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}</span>
-                  <span className="opacity-30">·</span>
-                  <span>Takt {currentBar}/{currentBeat}</span>
-                </div>
+                <PlaybackClock playback={playback} song={song} duration={duration} />
               </div>
               <div className="text-lg sm:text-xl font-bold min-h-[1.75rem]" style={{ color: COLORS.stageText }}>
                 {idx >= 0 ? lines[idx].en : (playback.status === 'playing' ? '…' : '— Schwarz —')}

@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 
-export function WaveformCanvas({ audioBuffer, pxPerSec, bpm, timeSigNum, duration, width, height = 110, audioOffset = 0 }) {
+// Memoized: its props only change on zoom/song edits, not with the playhead
+export const WaveformCanvas = memo(function WaveformCanvas({ audioBuffer, pxPerSec, bpm, timeSigNum, duration, width, height = 110, audioOffset = 0 }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -89,4 +90,4 @@ export function WaveformCanvas({ audioBuffer, pxPerSec, bpm, timeSigNum, duratio
   }, [audioBuffer, pxPerSec, bpm, timeSigNum, duration, width, height, audioOffset]);
 
   return <canvas ref={canvasRef} style={{ width: `${width}px`, height: `${height}px`, display: 'block' }} />;
-}
+});

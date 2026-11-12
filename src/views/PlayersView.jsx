@@ -135,7 +135,7 @@ const PLAYER_ROLES = [
 // Role toggle button; `muted` is the subdued style used for "no role"
 function RoleButton({ active, muted, isDark, onClick, children }) {
   const activeClass = muted
-    ? 'bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold'
+    ? 'bg-amber-500/20 border border-amber-500/40 text-amber-700 dark:text-amber-400 font-bold'
     : 'bg-amber-500 text-black font-bold shadow-sm';
   const idleClass = isDark
     ? (muted ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700')
@@ -197,7 +197,7 @@ export function PlayersView({ players = {}, playback = {}, localPlayerId, onSetP
                         />
                         <PlayerNameInput player={p} onSave={(name) => onSetPlayerName(p.id, name)} />
                         {isSelf && (
-                          <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                          <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-400">
                             Dieses Gerät
                           </span>
                         )}
