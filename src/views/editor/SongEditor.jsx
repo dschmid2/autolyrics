@@ -3,12 +3,15 @@ import { Plus } from 'lucide-react';
 import { useTheme } from '../../theme';
 import { parsePlaintextSongLines } from '../../lib/plaintextImport';
 import { computeLinesWithTimes } from '../../lib/timing';
-import { updateLineIn, changeLineBar, changeTimingMode, insertLineAfter, moveLineBy } from '../../lib/songEdits';
+import { updateLineIn, changeLineTiming, changeTimingMode, insertLineAfter, moveLineBy } from '../../lib/songEdits';
+import { ShiftModeToggle } from './ShiftModeToggle';
 import { AudioSection } from './AudioSection';
 import { LineRow } from './LineRow';
 import { SongMetaFields } from './SongMetaFields';
 
-export function SongEditor({ song, onChange, onDelete, playback, sendPlayback }) {
+// `shiftMode` ('single' | 'following') applies to dragged markers AND edited
+// bar/beat/second fields; it is owned by EditorView so it survives song changes.
+export function SongEditor({ song, onChange, onDelete, playback, sendPlayback, shiftMode, onShiftModeChange }) {
   const { colors: COLORS } = useTheme();
   // Reported by WaveformEditor: only what this view needs, so it re-renders on changes only
   const [waveformPlayback, setWaveformPlayback] = useState({ isPlaying: false, activeLineId: null });
@@ -70,16 +73,21 @@ export function SongEditor({ song, onChange, onDelete, playback, sendPlayback })
         onUpdate={update}
         onPlaybackStateChange={setWaveformPlayback}
         seekRef={waveformSeekRef}
+        shiftMode={shiftMode}
+        onShiftModeChange={onShiftModeChange}
         playback={playback}
         sendPlayback={sendPlayback}
       />
 
       {/* Lyric Line Textfields Header & Scroll Container */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.inkDim }}>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="text-xs font-bold uppercase tracking-wide mr-auto" style={{ color: COLORS.inkDim }}>
             Songzeilen &amp; Marker-Zeitstempel ({song.lines.length})
           </div>
+          {song.lines.length > 1 && (
+            <ShiftModeToggle mode={shiftMode} onChange={onShiftModeChange} />
+          )}
           {song.lines.length > 0 && (
             <button
               onClick={() => insertLine(-1)}
@@ -111,7 +119,7 @@ export function SongEditor({ song, onChange, onDelete, playback, sendPlayback })
                 rowRef={isPlayingActive ? activeLineRowRef : null}
                 onJump={() => jumpToLineMarker(l.id)}
                 onChange={(patch) => updateLine(l.id, patch)}
-                onBarChange={(value) => update({ lines: changeLineBar(song, l.id, value) })}
+                onTimingChange={(patch) => update({ lines: changeLineTiming(song, l.id, patch, shiftMode) })}
                 onInsertAfter={() => insertLine(idx)}
                 onMove={(dir) => moveLine(l.id, dir)}
                 onRemove={() => removeLine(l.id)}

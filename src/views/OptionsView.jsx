@@ -13,6 +13,8 @@ export function OptionsView({ playback, onChangePlayback }) {
   const liveWidthPercent = getSetting(playback, 'liveWidthPercent');
   const liveTextAlign = playback.liveTextAlign || 'center';
   const showHeartbeat = getSetting(playback, 'showHeartbeat');
+  const autoNextSong = getSetting(playback, 'autoNextSong') !== false;
+  const autoNextDelaySeconds = getSetting(playback, 'autoNextDelaySeconds');
   const stagePastLines = getSetting(playback, 'stagePastLines');
   const stageFutureLines = getSetting(playback, 'stageFutureLines');
   const stageLeadSeconds = getSetting(playback, 'stageLeadSeconds');
@@ -261,6 +263,41 @@ export function OptionsView({ playback, onChangePlayback }) {
               onChange={(v) => onChangePlayback({ stageCommentWidthPercent: v })}
               className="space-y-1 pt-1"
             />
+          </div>
+
+          {/* Card 3: Wiedergabe */}
+          <div className="rounded-2xl p-5 space-y-4 shadow-sm lg:col-span-2" style={{ background: COLORS.panelBg2 }}>
+            <div className="border-b pb-2" style={{ borderColor: COLORS.line }}>
+              <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: COLORS.ink }}>
+                Wiedergabe
+              </h2>
+            </div>
+
+            <label className="flex items-center justify-between gap-3 text-xs cursor-pointer" style={{ color: COLORS.inkDim }}>
+              <span>Nach Songende automatisch den nächsten Song laden (gestoppt, am Anfang)</span>
+              <input
+                type="checkbox"
+                checked={autoNextSong}
+                onChange={(e) => onChangePlayback({ autoNextSong: e.target.checked })}
+                className="w-4 h-4 accent-amber shrink-0"
+              />
+            </label>
+
+            {autoNextSong && (
+              <RangeSetting
+                label="Wartezeit nach Songende"
+                value={autoNextDelaySeconds}
+                display={`${autoNextDelaySeconds}s`}
+                min={0}
+                max={30}
+                step={1}
+                onChange={(v) => onChangePlayback({ autoNextDelaySeconds: v })}
+              />
+            )}
+
+            <p className="text-[11px] leading-snug" style={{ color: COLORS.inkDim }}>
+              Ein Song endet mit der letzten Zeile plus deren Dauer (ohne Angabe 4 Sekunden). Nach dem letzten Song der Liste passiert nichts. Gilt nur für die Steuerung, nicht für „Send to screens“ im Song-Editor.
+            </p>
           </div>
         </div>
       </div>

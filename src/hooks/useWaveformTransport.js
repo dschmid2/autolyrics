@@ -83,6 +83,7 @@ export function useWaveformTransport({
     const elapsed = timeSec !== undefined ? timeSec : currentTimeRef.current;
     sendPlayback(withAnchor(playbackRef.current || {}, {
       songId: songRef.current.id,
+      source: 'editor', // no automatic next song while editing
       status,
       anchorElapsed: Math.max(0, elapsed),
     }));
@@ -94,6 +95,7 @@ export function useWaveformTransport({
       if (sendToScreensRef.current && sendPlayback && playbackRef.current) {
         sendPlayback(withAnchor(playbackRef.current, {
           songId: songRef.current.id,
+          source: 'editor', // no automatic next song while editing
           status: 'stopped',
           anchorElapsed: 0,
         }));
@@ -111,6 +113,7 @@ export function useWaveformTransport({
       } else {
         sendPlayback(withAnchor(playbackRef.current || {}, {
           songId: songRef.current.id,
+          source: 'editor', // no automatic next song while editing
           status: 'stopped',
           anchorElapsed: 0,
         }));

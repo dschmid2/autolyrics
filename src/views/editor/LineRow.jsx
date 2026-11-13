@@ -1,12 +1,13 @@
 import { ChevronUp, ChevronDown, Plus, Trash2 } from 'lucide-react';
 import { useTheme } from '../../theme';
 import { fmtTime } from '../../lib/timing';
+import { NumberDraftInput } from '../../components/form/NumberDraftInput';
 
 // One editable lyric line (text, translation, cue, timing, duration, actions).
 // Clicking the row moves the waveform playhead to its marker.
 export function LineRow({
   line: l, lineNum, t, timingMode, timeSigNum, isPlayingActive, rowRef,
-  onJump, onChange, onBarChange, onInsertAfter, onMove, onRemove,
+  onJump, onChange, onTimingChange, onInsertAfter, onMove, onRemove,
 }) {
   const { colors: COLORS, isDark } = useTheme();
   return (
@@ -84,11 +85,11 @@ export function LineRow({
         {l.mode === 'sec' && (
           <div className="flex items-center gap-1">
             <span style={{ color: COLORS.inkDim }}>s:</span>
-            <input
-              type="number"
+            <NumberDraftInput
               step="0.1"
+              min="0"
               value={l.timeSec !== undefined && l.timeSec !== null ? l.timeSec : ''}
-              onChange={(e) => onChange({ timeSec: e.target.value })}
+              onCommit={(n) => onTimingChange({ timeSec: n })}
               className="w-16 px-1.5 py-1 rounded border"
               style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
             />
@@ -135,23 +136,23 @@ export function LineRow({
         {(l.mode === 'bar_beat' || !l.mode) && (
           <div className="flex items-center gap-1">
             <span style={{ color: COLORS.inkDim }}>Takt:</span>
-            <input
-              type="number"
+            <NumberDraftInput
+              integer
               step="1"
               min="1"
               value={l.bar !== undefined && l.bar !== null ? l.bar : 1}
-              onChange={(e) => onBarChange(e.target.value)}
+              onCommit={(n) => onTimingChange({ bar: n })}
               className="w-12 px-1.5 py-1 rounded border"
               style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
             />
             <span style={{ color: COLORS.inkDim }}>Schlag:</span>
-            <input
-              type="number"
+            <NumberDraftInput
+              integer
               step="1"
               min="1"
               max={timeSigNum || 4}
               value={l.beat !== undefined && l.beat !== null ? l.beat : 1}
-              onChange={(e) => onChange({ beat: e.target.value })}
+              onCommit={(n) => onTimingChange({ beat: n })}
               className="w-12 px-1.5 py-1 rounded border"
               style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
             />
@@ -161,12 +162,12 @@ export function LineRow({
         {l.mode === 'beat' && (
           <div className="flex items-center gap-1">
             <span style={{ color: COLORS.inkDim }}>Schlag:</span>
-            <input
-              type="number"
+            <NumberDraftInput
+              integer
               step="1"
               min="1"
               value={l.beat !== undefined && l.beat !== null ? l.beat : 1}
-              onChange={(e) => onChange({ beat: e.target.value })}
+              onCommit={(n) => onTimingChange({ beat: n })}
               className="w-16 px-1.5 py-1 rounded border"
               style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
             />

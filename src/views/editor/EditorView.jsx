@@ -9,6 +9,7 @@ import { SongEditor } from './SongEditor';
 export function EditorView({ songs, onChangeSongs, playback, sendPlayback }) {
   const { colors: COLORS } = useTheme();
   const [selectedId, setSelectedId] = useState(songs[0] ? songs[0].id : null);
+  const [shiftMode, setShiftMode] = useState('single');
   const selected = songs.find((s) => s.id === selectedId) || null;
 
   const addSong = () => {
@@ -84,11 +85,14 @@ export function EditorView({ songs, onChangeSongs, playback, sendPlayback }) {
           <div className="flex-1 min-w-0">
             {selected ? (
               <SongEditor
+                key={selected.id}
                 song={selected}
                 onChange={updateSong}
                 onDelete={() => deleteSong(selected.id)}
                 playback={playback}
                 sendPlayback={sendPlayback}
+                shiftMode={shiftMode}
+                onShiftModeChange={setShiftMode}
               />
             ) : (
               <div className="text-sm" style={{ color: COLORS.inkDim }}>Song auswählen oder neu erstellen.</div>

@@ -8,45 +8,72 @@ export function updateLineIn(song, id, patch) {
   return song.lines.map((l) => (l.id === id ? { ...l, ...patch } : l));
 }
 
-// Sets the bar of one line; with a valid number, all following lines in
-// bar/beat mode are shifted by the same number of bars
-export function changeLineBar(song, lineId, newBarVal) {
-  const lineIndex = song.lines.findIndex((l) => l.id === lineId);
-  if (lineIndex === -1) return song.lines;
-  const currentLine = song.lines[lineIndex];
+// Timing mode of a line (falls back to the song's mode)
+function modeOf(song, line) {
+  return line.mode || song.timingMode || 'bar_beat';
+}
 
-  if (newBarVal === '' || newBarVal === null || newBarVal === undefined) {
-    return updateLineIn(song, lineId, { bar: '' });
+const num = (value, fallback) => {
+  const n = Number(value);
+  return value === '' || value === null || value === undefined || !Number.isFinite(n) ? fallback : n;
+};
+
+// How far an edit moved a line: { beats, seconds }, or null if it did not move
+// (or for relative modes, where following lines move along anyway)
+function timingDelta(song, before, after) {
+  const bpm = Number(song.bpm) || 90;
+  const sig = Number(song.timeSigNum) || 4;
+  const mode = modeOf(song, after);
+  let beats = null;
+  let seconds = null;
+  if (mode === 'bar_beat') {
+    const total = (l) => (num(l.bar, 1) - 1) * sig + (num(l.beat, 1) - 1);
+    beats = total(after) - total(before);
+  } else if (mode === 'beat') {
+    beats = num(after.beat, 1) - num(before.beat, 1);
+  } else if (mode === 'sec') {
+    seconds = num(after.timeSec, 0) - num(before.timeSec, 0);
+  } else {
+    return null;
   }
+  if (beats === null) beats = seconds * (bpm / 60);
+  if (seconds === null) seconds = beats * (60 / bpm);
+  return beats === 0 && seconds === 0 ? null : { beats, seconds };
+}
 
-  const parsedNewBar = parseInt(newBarVal, 10);
-  if (isNaN(parsedNewBar)) {
-    return updateLineIn(song, lineId, { bar: newBarVal });
+// A line moved by `delta`, in its own timing mode (never before the song start)
+function shiftLine(song, line, delta) {
+  const sig = Number(song.timeSigNum) || 4;
+  const mode = modeOf(song, line);
+  if (mode === 'bar_beat') {
+    const total = Math.max(0, (num(line.bar, 1) - 1) * sig + (num(line.beat, 1) - 1) + Math.round(delta.beats));
+    return { ...line, bar: Math.floor(total / sig) + 1, beat: (total % sig) + 1 };
   }
-
-  const oldBar = currentLine.bar !== undefined && currentLine.bar !== null && currentLine.bar !== ''
-    ? Number(currentLine.bar)
-    : 1;
-
-  const deltaBar = parsedNewBar - oldBar;
-  if (deltaBar === 0) {
-    return updateLineIn(song, lineId, { bar: parsedNewBar });
+  if (mode === 'beat') {
+    return { ...line, beat: Math.max(1, num(line.beat, 1) + Math.round(delta.beats)) };
   }
+  if (mode === 'sec') {
+    return { ...line, timeSec: Math.max(0, Math.round((num(line.timeSec, 0) + delta.seconds) * 100) / 100) };
+  }
+  return line;
+}
 
-  const defaultMode = song.timingMode || 'bar_beat';
-  return song.lines.map((l, idx) => {
-    if (l.id === lineId) {
-      return { ...l, bar: parsedNewBar };
-    }
-    if (idx > lineIndex) {
-      const lMode = l.mode || defaultMode;
-      if (lMode === 'bar_beat') {
-        const curBar = l.bar !== undefined && l.bar !== null && l.bar !== '' ? Number(l.bar) : 1;
-        return { ...l, bar: Math.max(1, curBar + deltaBar) };
-      }
-    }
-    return l;
-  });
+// Applies a change of a line's time fields (bar, beat, timeSec).
+// shiftMode 'single': only this line. 'following': all lines that come after
+// it in time move by the same amount (same rule as dragging a marker).
+export function changeLineTiming(song, lineId, patch, shiftMode) {
+  const before = song.lines.find((l) => l.id === lineId);
+  if (!before) return song.lines;
+  const after = { ...before, ...patch };
+  const lines = song.lines.map((l) => (l.id === lineId ? after : l));
+  if (shiftMode !== 'following') return lines;
+
+  const delta = timingDelta(song, before, after);
+  if (!delta) return lines;
+  const ordered = computeLinesWithTimes(song);
+  const position = ordered.findIndex((l) => l.id === lineId);
+  const followingIds = new Set(ordered.slice(position + 1).map((l) => l.id));
+  return lines.map((l) => (followingIds.has(l.id) ? shiftLine(song, l, delta) : l));
 }
 
 // Song patch switching all lines to another timing mode, keeping their times

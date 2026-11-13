@@ -3,10 +3,11 @@ import { fmtTime } from '../../lib/timing';
 
 // All lines of the loaded song; clicking one starts playback from there.
 // `compact` (phones): scrolls with the page, no translation, cue below the bar badge.
-export function LineList({ lines, idx, onPlayFrom, activeRef, compact = false }) {
+export function LineList({ lines, idx, onPlayFrom, activeRef, containerRef, compact = false }) {
   const { colors: COLORS } = useTheme();
   return (
     <div
+      ref={containerRef}
       className={compact
         ? 'rounded-2xl p-1.5 space-y-1.5 shadow-sm border'
         : 'max-h-[calc(100vh-22rem)] overflow-y-auto rounded-2xl p-2 space-y-1.5 shadow-sm border'}

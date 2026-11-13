@@ -20,6 +20,9 @@ const PLAYBACK_DEFAULTS = Object.freeze({
   stageLineSpacing: 24,
   stagePositionY: 0,
   stageShowTitle: false,
+  // After a song has finished, load the next one (server/autoNext.js)
+  autoNextSong: true,
+  autoNextDelaySeconds: 3,
 });
 
 // Full initial playback object. `anchorEpoch` must be in server time.
