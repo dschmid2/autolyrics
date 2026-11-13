@@ -42,12 +42,14 @@ src/hooks/                   React hooks
   useCurrentSong.js          Selected song + timed lines
   useViewRoute.js            View <-> URL (/live, /stage, /player, /)
   useWaveformTransport.js    Editor playback: audio sync, playhead, "send to screens"
+  useMediaQuery.js           useMediaQuery(), useIsPhone() (below Tailwind `sm`, 640 px)
   useFullscreen.js, useAudioBuffer.js
 src/components/              Shared UI: TopMenuBar, VersionBadge, ConnectionBadge, GlobalStyles,
                              form/RangeSetting, display/BeatDot
 src/views/                   One file per screen: ControlView, OptionsView, PlayersView,
                              ProjectionView, StageView, UnassignedPlayerView
-src/views/control/           PlaybackClock (the only part of the control view that ticks 10/s)
+src/views/control/           TransportButtons, LinePreview, SongList, LineList (each with a `compact` phone variant),
+                             PlaybackClock (the only part of the control view that ticks 10/s)
 src/views/editor/            EditorView, SongEditor (+ SongMetaFields, AudioSection, LineRow), ImportExport, InstanceSync
 src/views/editor/waveform/   WaveformEditor (+ WaveformPreview, WaveformToolbar, WaveformTimeline, WaveformCanvas)
 src/styles.css               Tailwind source
@@ -90,6 +92,8 @@ scripts/generate-version.js  Writes src/version.json + public/version.json
 * `App.jsx` only wires things together. Put new screens in `src/views/`, reusable UI in `src/components/`, React state logic in `src/hooks/` and pure logic in `src/lib/` (or `shared/` if the server needs it too).
 * `shared/` modules must stay plain CommonJS without dependencies (the server `require`s them; esbuild bundles them for the client). The Docker runtime stage copies `shared/` next to `server/`.
 * Views that need the playback position call `useElapsed()` themselves; do not lift it into `App` (it re-renders every 100 ms while playing).
+* Position hooks (`useLineIndex`, `useStageLineState`, `useSongCompleted`) compute their value **during render** (`useTickedValue`) and use state only to trigger re-renders. Never return an index from state: after a song change it would be one render behind and can point past the new song's lines (this crashed the control view).
+* `StageView` re-measures line heights via `ResizeObserver` (late web font load changes wrapping); do not rely on extra renders to correct the offset.
 * Avoid render loops: values passed to children or used as effect dependencies must be stable (`useMemo` for derived arrays/objects such as `computeLinesWithTimes(song)`), and child→parent reports via `useEffect` should send primitive values (ids, booleans) only. Expected render rates while playing: `PlaybackClock` 10/s (the rest of the control view only on line changes), live/stage only on line changes, editor waveform 60/s (`WaveformEditor` and its preview/toolbar/timeline; the memoized `WaveformCanvas` not), everything else 0.
 
 ### Versioning Mechanism
@@ -263,7 +267,7 @@ See the repository layout in section 1 for where each piece lives:
 6. `parsePlaintextSongLines(text)`: plaintext lyric import.
 7. `useAudioBuffer`, `WaveformCanvas` & `WaveformEditor`: Web Audio decoding and canvas waveform with bar/beat grid, drag-and-drop line markers (`single` vs `following` drag modes), positive/negative `audioOffset`, zoom, numbered markers, and a "send to screens" toggle that drives the live displays from the editor's playback.
 8. Views in `views/` (selected in `App()` via `useViewRoute()` from the URL path; `/live`, `/stage`, `/player` are real routes, the operator sub-views are internal state at `/`):
-   * `ControlView` (with `TopMenuBar`): song selection, playback control (`usePlaybackControls`), jump-to-line, mobile QR codes.
+   * `ControlView` (with `TopMenuBar`): song selection, playback control (`usePlaybackControls`), jump-to-line, mobile QR codes. Two arrangements of the same parts: `WideLayout` (tablet/desktop, unchanged) and `PhoneLayout` (`useIsPhone()`): collapsible song picker on top, transport row (icon-only stop/next) + live line pinned under the menu bar (`sticky top-14`), lines scrolling with the page, no translations, cue below the bar badge. When changing the control view, check both.
    * `PlayersView`: list of connected devices, role assignment, deletion and per-device stage settings (`PlayerStageSettings`).
    * `ProjectionView`: audience view (`/live`) showing original line and translation, heartbeat dot, auto blackout if disconnected > 30 s or song ends; skips `stageOnly` lines.
    * `StageView`: teleprompter (`/stage`) with past/future lines, comment column, stage lead seconds and an optional static title bar with the song title (`stageShowTitle`, half the stage font size). Uses `useStageLineState()`: `activeIdx` (line being sung, white) vs. `positionIdx` (line the view is centered on). Before the first line starts, line 0 is centered but grey; after a line's duration or the song end the view stays on the last started line (grey). `legacy.js` mirrors this with `startedIndex()`.

@@ -4,7 +4,7 @@ import { getBarBeat, fmtTime } from '../../lib/timing';
 
 // Running time and bar/beat of the control view. Kept separate so that only
 // this small component re-renders 10x per second while playing.
-export function PlaybackClock({ playback, song, duration }) {
+export function PlaybackClock({ playback, song, duration, compact = false }) {
   const { colors: COLORS, isDark } = useTheme();
   const elapsed = useElapsed(playback);
   const { bar: currentBar, beat: currentBeat } = song
@@ -13,7 +13,9 @@ export function PlaybackClock({ playback, song, duration }) {
 
   return (
     <div
-      className="font-mono text-sm sm:text-base font-bold px-3 py-1 rounded-lg shadow-sm flex items-center gap-2"
+      className={compact
+        ? 'font-mono text-xs font-bold px-2 py-1 rounded-lg shadow-sm flex items-center gap-1.5 shrink-0 whitespace-nowrap'
+        : 'font-mono text-sm sm:text-base font-bold px-3 py-1 rounded-lg shadow-sm flex items-center gap-2'}
       style={{ background: isDark ? '#1C1C22' : COLORS.panelBg, color: COLORS.ink }}
     >
       <span>{fmtTime(elapsed)} <span className="opacity-40">/</span> {fmtTime(duration)}</span>
