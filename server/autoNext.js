@@ -1,5 +1,6 @@
 // Loads the next song automatically once the current one has finished, so the
-// stage display already shows it. The server owns this timer (not a browser):
+// stage display already shows it. Only for playback started from the control
+// view (playback.source !== 'editor'), not for the editor's "send to screens". The server owns this timer (not a browser):
 // it also works with no operator screen open and can never fire twice.
 const { computeLinesWithTimes, getSongDuration } = require('../shared/songTiming');
 const { getSetting } = require('../shared/playbackDefaults');
@@ -10,6 +11,8 @@ const MAX_TIMEOUT_MS = 2147483647; // setTimeout limit
 // or null if nothing should happen.
 function msUntilAutoNext(playback, songs, now) {
   if (!playback || playback.status !== 'playing') return null;
+  // Only in live operation: the song editor drives the screens with source 'editor'
+  if (playback.source === 'editor') return null;
   if (getSetting(playback, 'autoNextSong') === false) return null;
   const song = songs.find((s) => s.id === playback.songId);
   if (!song) return null;

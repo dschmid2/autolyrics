@@ -1,8 +1,10 @@
 import { computeElapsed, withAnchor } from '../lib/playback';
 
-// Transport commands (load, play/pause, stop, seek) for the operator views
+// Transport commands (load, play/pause, stop, seek) for the operator views.
+// `source: 'control'` marks live operation: only then the server loads the next
+// song automatically at the end (the editor's "send to screens" uses 'editor').
 export function usePlaybackControls(playback, sendPlayback) {
-  const send = (patch) => sendPlayback(withAnchor(playback, patch));
+  const send = (patch) => sendPlayback(withAnchor(playback, { ...patch, source: 'control' }));
   const seekTo = (sec) => send({ anchorElapsed: Math.max(0, sec) });
 
   return {

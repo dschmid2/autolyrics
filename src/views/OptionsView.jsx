@@ -296,7 +296,7 @@ export function OptionsView({ playback, onChangePlayback }) {
             )}
 
             <p className="text-[11px] leading-snug" style={{ color: COLORS.inkDim }}>
-              Ein Song endet mit der letzten Zeile plus deren Dauer (ohne Angabe 4 Sekunden). Nach dem letzten Song der Liste passiert nichts.
+              Ein Song endet mit der letzten Zeile plus deren Dauer (ohne Angabe 4 Sekunden). Nach dem letzten Song der Liste passiert nichts. Gilt nur für die Steuerung, nicht für „Send to screens“ im Song-Editor.
             </p>
           </div>
         </div>

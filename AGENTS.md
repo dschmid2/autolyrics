@@ -189,13 +189,15 @@ Application data is separated into three distinct JSON files. Writes are debounc
     "stagePositionY": 0,
     "stageShowTitle": false,
     "autoNextSong": true,
-    "autoNextDelaySeconds": 3
+    "autoNextDelaySeconds": 3,
+    "source": "control"
   }
   ```
   * `status`: `"playing"` | `"paused"` | `"stopped"`.
   * Timing model: the server never ticks a clock. Clients compute the current position as `anchorElapsed + (serverNow() - anchorEpoch) / 1000` while `playing`, otherwise `anchorElapsed`. Any seek/start/pause just sets a new anchor.
   * `anchorEpoch` is in **server time**. Always create it with `serverNow()`, never `Date.now()` — device clocks differ, and a stage device whose clock runs behind the operator would otherwise show the previous line after a jump. `serverNow()` = `Date.now()` + an offset each client estimates from ping/pong round trips (`recordClockSample`, in both `src/lib/clock.js` and `public/legacy.js`).
-  * **Auto next song** (`server/autoNext.js`): while `status` is `playing` and `autoNextSong` is not `false`, the server sets a timer for the song end (`getSongDuration()` = last line + its duration, default 4 s) plus `autoNextDelaySeconds`. It then loads the next song of the list as `stopped` at `anchorElapsed: 0` and broadcasts `playback` to **all** clients. Nothing happens after the last song. The server owns this (not a browser) so it works without an operator screen and never fires twice; call `autoNext.reschedule()` whenever playback or songs change.
+  * `source`: who last set status/position — `'control'` (`usePlaybackControls`) or `'editor'` (`useWaveformTransport`, "send to screens"). Every transport change must set it.
+  * **Auto next song** (`server/autoNext.js`): while `status` is `playing`, `source` is not `'editor'` and `autoNextSong` is not `false`, the server sets a timer for the song end (`getSongDuration()` = last line + its duration, default 4 s) plus `autoNextDelaySeconds`. It then loads the next song of the list as `stopped` at `anchorElapsed: 0` and broadcasts `playback` to **all** clients. Nothing happens after the last song. The server owns this (not a browser) so it works without an operator screen and never fires twice; call `autoNext.reschedule()` whenever playback or songs change.
   * Loading a song (operator or auto next) always means `stopped` at 0. `ControlView` then scrolls its line list to the top; `EditorView` renders `SongEditor` with `key={song.id}`, so playhead and scroll positions reset.
   * `currentIndex()` treats a line as started 50 ms before its timestamp (`LINE_START_TOLERANCE`) to absorb remaining clock sync error.
 * `data/players.json`: Registered player devices:

@@ -58,7 +58,7 @@ Autolyrics bietet verschiedene spezialisierte Ansichten, die über das Netzwerk 
 * Positionierung des Textes (X- und Y-Achse auf dem Bildschirm).
 * Aktivierung/Deaktivierung des Heartbeat-Punkts.
 * Konfiguration der Stage-View (Anzahl vergangener/zukünftiger Zeilen, Bühnenvorlauf in Sekunden).
-* Automatischer Wechsel zum nächsten Song nach dem Songende (ein-/ausschaltbar, mit einstellbarer Wartezeit). Der nächste Song wird gestoppt am Anfang geladen und erscheint so bereits auf der Stage-View.
+* Automatischer Wechsel zum nächsten Song nach dem Songende (ein-/ausschaltbar, mit einstellbarer Wartezeit). Der nächste Song wird gestoppt am Anfang geladen und erscheint so bereits auf der Stage-View. Gilt nur für die Wiedergabe aus der Steuerung, nicht für „Send to screens“ im Song-Editor.
 * Optionale Titelzeile mit dem Songtitel auf der Stage-View (halbe Schriftgrösse des Songtexts).
 
 ---
