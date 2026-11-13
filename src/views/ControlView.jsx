@@ -42,8 +42,21 @@ export function ControlView({ songs, playback, sendPlayback }) {
     }
   }, [idx, isPhone]);
 
+  // Another song was loaded (by the operator or automatically): show its start
+  const lineListRef = useRef(null);
+  const songId = song ? song.id : null;
+  const lastSongIdRef = useRef(songId);
+  useEffect(() => {
+    if (lastSongIdRef.current === songId) return;
+    const hadSong = lastSongIdRef.current !== null;
+    lastSongIdRef.current = songId;
+    if (!hadSong) return; // first load of the page: keep the active line in view
+    if (isPhone) window.scrollTo({ top: 0 });
+    else if (lineListRef.current) lineListRef.current.scrollTop = 0;
+  }, [songId, isPhone]);
+
   const shared = {
-    songs, playback, song, lines, idx, controls, activeLineRef, pinnedRef,
+    songs, playback, song, lines, idx, controls, activeLineRef, pinnedRef, lineListRef,
     duration: getSongDuration(lines),
   };
   return isPhone ? <PhoneLayout {...shared} /> : <WideLayout {...shared} />;
@@ -68,7 +81,7 @@ function LinesHint({ song, lines }) {
   return null;
 }
 
-function WideLayout({ songs, playback, song, lines, idx, controls, activeLineRef, duration }) {
+function WideLayout({ songs, playback, song, lines, idx, controls, activeLineRef, lineListRef, duration }) {
   const { colors: COLORS } = useTheme();
   return (
     <div className="min-h-[calc(100vh-3.5rem)] pb-10" style={{ background: COLORS.panelBg }}>
@@ -139,7 +152,7 @@ function WideLayout({ songs, playback, song, lines, idx, controls, activeLineRef
             {(!song || lines.length === 0) ? (
               <LinesHint song={song} lines={lines} />
             ) : (
-              <LineList lines={lines} idx={idx} onPlayFrom={controls.playFrom} activeRef={activeLineRef} />
+              <LineList lines={lines} idx={idx} onPlayFrom={controls.playFrom} activeRef={activeLineRef} containerRef={lineListRef} />
             )}
           </div>
         </div>
