@@ -47,6 +47,11 @@ Autolyrics bietet verschiedene spezialisierte Ansichten, die über das Netzwerk 
   * Absolut in Takten und Schlägen (Bar/Beat)
 * **JSON / Datei Import & Export**: Sichern und Wiederherstellen der gesamten Songbibliothek durch Datei-Download (`.json`) und Datei-Upload (`.json`, `.txt`) direkt im Browser ohne Notwendigkeit der Zwischenablage.
 
+* **Synchronisation zwischen Instanzen**: Unter „Von anderer Instanz synchronisieren“ die Adresse einer anderen Autolyrics-Instanz eingeben (z. B. `http://nas.local:8080`) und verbinden. Die Vorschau zeigt pro Song „Neu“, „Geändert“ oder „Unverändert“; ausgewählte Songs werden übernommen, optional samt MP3-Dateien.
+  * Songs mit bekannter ID werden aktualisiert, neue hinzugefügt. Songs, die es nur lokal gibt, bleiben erhalten.
+  * Die abholende Instanz muss die andere im Netzwerk erreichen können (aus Sicht des Servers bzw. Docker-Containers, nicht des Browsers). Beide Instanzen brauchen mindestens Version 1.2.
+  * Jede Instanz stellt ihr Songpaket unter `GET /api/export` bereit (ohne Anmeldung, wie die übrige Anwendung – nur in vertrauenswürdigen Netzen betreiben).
+
 ### 6. Anzeige-Optionen (`/options`)
 * Anpassung von Schriftgrößen (Haupttext & Übersetzung).
 * Positionierung des Textes (X- und Y-Achse auf dem Bildschirm).

@@ -3,6 +3,7 @@ import { ChevronUp, ChevronDown, Plus } from 'lucide-react';
 import { useTheme } from '../../theme';
 import { uid } from '../../lib/ids';
 import { ImportExport } from './ImportExport';
+import { InstanceSync } from './InstanceSync';
 import { SongEditor } from './SongEditor';
 
 export function EditorView({ songs, onChangeSongs, playback, sendPlayback }) {
@@ -93,6 +94,7 @@ export function EditorView({ songs, onChangeSongs, playback, sendPlayback }) {
               <div className="text-sm" style={{ color: COLORS.inkDim }}>Song auswählen oder neu erstellen.</div>
             )}
             <ImportExport songs={songs} onImport={onChangeSongs} />
+            <InstanceSync />
           </div>
         </div>
       </div>

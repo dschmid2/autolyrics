@@ -7,6 +7,7 @@ const multer = require('multer');
 const { WebSocketServer } = require('ws');
 const { createDefaultPlayback } = require('../shared/playbackDefaults');
 const { sanitizeStageSettings } = require('../shared/stageSettings');
+const { registerSyncRoutes } = require('./sync');
 
 const PORT = process.env.PORT || 8080;
 
@@ -159,6 +160,18 @@ app.post('/api/upload', upload.single('audio'), (req, res) => {
   }
   const audioUrl = `/uploads/${req.file.filename}`;
   res.json({ url: audioUrl, filename: req.file.filename, originalName: req.file.originalname });
+});
+
+// Song sync between instances (routes are registered here, `broadcast` is hoisted)
+registerSyncRoutes(app, {
+  getSongs: () => state.songs,
+  setSongs: (songs) => {
+    state.songs = songs;
+    persist();
+    broadcast({ type: 'songs', songs: state.songs });
+  },
+  uploadsDir: UPLOADS_DIR,
+  versionInfo: VERSION_INFO,
 });
 
 // Routing for direct access to /live, /stage, and /player
