@@ -8,13 +8,12 @@ import { WaveformToolbar } from './WaveformToolbar';
 import { WaveformTimeline } from './WaveformTimeline';
 
 // Audio player + waveform with draggable line markers for one song
-export function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChange, seekRef, playback, sendPlayback }) {
+export function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackStateChange, seekRef, markerDragMode, onMarkerDragModeChange, playback, sendPlayback }) {
   const { audioBuffer, loading, error } = useAudioBuffer(song.audioUrl);
   const audioRef = useRef(null);
   const containerRef = useRef(null);
   const [pxPerSec, setPxPerSec] = useState(40);
   const [isDragging, setIsDragging] = useState(false);
-  const [markerDragMode, setMarkerDragMode] = useState('single');
 
   const audioOffset = Number(song.audioOffset) || 0;
   const audioDuration = audioBuffer ? audioBuffer.duration : 0;
@@ -58,7 +57,7 @@ export function WaveformEditor({ song, computedLines, onUpdateSong, onPlaybackSt
         song={song}
         onUpdateSong={onUpdateSong}
         markerDragMode={markerDragMode}
-        onMarkerDragModeChange={setMarkerDragMode}
+        onMarkerDragModeChange={onMarkerDragModeChange}
         sendToScreens={transport.sendToScreens}
         onToggleSendToScreens={transport.toggleSendToScreens}
         pxPerSec={pxPerSec}

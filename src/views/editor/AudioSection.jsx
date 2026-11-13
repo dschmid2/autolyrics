@@ -4,7 +4,7 @@ import { useTheme } from '../../theme';
 import { WaveformEditor } from './waveform/WaveformEditor';
 
 // MP3 upload/removal and, if a file is linked, the waveform editor
-export function AudioSection({ song, computedLines, onUpdate, onPlaybackStateChange, seekRef, playback, sendPlayback }) {
+export function AudioSection({ song, computedLines, onUpdate, onPlaybackStateChange, seekRef, shiftMode, onShiftModeChange, playback, sendPlayback }) {
   const { colors: COLORS } = useTheme();
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -86,6 +86,8 @@ export function AudioSection({ song, computedLines, onUpdate, onPlaybackStateCha
           onUpdateSong={onUpdate}
           onPlaybackStateChange={onPlaybackStateChange}
           seekRef={seekRef}
+          markerDragMode={shiftMode}
+          onMarkerDragModeChange={onShiftModeChange}
           playback={playback}
           sendPlayback={sendPlayback}
         />

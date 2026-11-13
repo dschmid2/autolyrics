@@ -47,6 +47,7 @@ Autolyrics bietet verschiedene spezialisierte Ansichten, die über das Netzwerk 
   * Absolut in Takten und Schlägen (Bar/Beat)
 * **JSON / Datei Import & Export**: Sichern und Wiederherstellen der gesamten Songbibliothek durch Datei-Download (`.json`) und Datei-Upload (`.json`, `.txt`) direkt im Browser ohne Notwendigkeit der Zwischenablage.
 
+* **Verschiebe-Modus**: „Nur diese Zeile“ oder „Diese & folgende“ gilt für das Ziehen der Marker auf der Wellenform und für das Ändern von Takt, Schlag oder Sekunden in einer Zeile.
 * **Synchronisation zwischen Instanzen**: Unter „Von anderer Instanz synchronisieren“ die Adresse einer anderen Autolyrics-Instanz eingeben (z. B. `http://nas.local:8080`) und verbinden. Die Vorschau zeigt pro Song „Neu“, „Geändert“ oder „Unverändert“; ausgewählte Songs werden übernommen, optional samt MP3-Dateien.
   * Songs mit bekannter ID werden aktualisiert, neue hinzugefügt. Songs, die es nur lokal gibt, bleiben erhalten.
   * Die abholende Instanz muss die andere im Netzwerk erreichen können (aus Sicht des Servers bzw. Docker-Containers, nicht des Browsers). Beide Instanzen brauchen mindestens Version 1.2.
@@ -57,6 +58,7 @@ Autolyrics bietet verschiedene spezialisierte Ansichten, die über das Netzwerk 
 * Positionierung des Textes (X- und Y-Achse auf dem Bildschirm).
 * Aktivierung/Deaktivierung des Heartbeat-Punkts.
 * Konfiguration der Stage-View (Anzahl vergangener/zukünftiger Zeilen, Bühnenvorlauf in Sekunden).
+* Automatischer Wechsel zum nächsten Song nach dem Songende (ein-/ausschaltbar, mit einstellbarer Wartezeit). Der nächste Song wird gestoppt am Anfang geladen und erscheint so bereits auf der Stage-View.
 * Optionale Titelzeile mit dem Songtitel auf der Stage-View (halbe Schriftgrösse des Songtexts).
 
 ---
