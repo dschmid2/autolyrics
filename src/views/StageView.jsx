@@ -23,6 +23,7 @@ export function StageView({ songs, playback, onExit }) {
 
   const [containerRef, requestFs] = useFullscreen();
   const lineRefs = useRef([]);
+  const scrollerRef = useRef(null);
   const [activeCenterOffset, setActiveCenterOffset] = useState(0);
 
 
@@ -92,7 +93,25 @@ export function StageView({ songs, playback, onExit }) {
       updateOffset();
     };
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    // Line heights can change after this effect ran, e.g. when the web font
+    // finishes loading and a line wraps differently. Measure again then.
+    let observer = null;
+    if (typeof ResizeObserver !== 'undefined' && scrollerRef.current) {
+      observer = new ResizeObserver(() => {
+        for (let i = startIndex; i <= endIndex; i++) {
+          const el = lineRefs.current[i];
+          if (el && el.offsetHeight > 0) measuredHeightsRef.current[i] = el.offsetHeight;
+        }
+        updateOffset();
+      });
+      observer.observe(scrollerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (observer) observer.disconnect();
+    };
   }, [currentIdx, lines, stageFontSize, stageLineSpacing, commentPercent, lineRowHeight, startIndex, endIndex]);
 
   return (
@@ -126,6 +145,7 @@ export function StageView({ songs, playback, onExit }) {
 
         {/* Animated scrolling container */}
         <div
+          ref={scrollerRef}
           className="w-full absolute left-0 flex flex-col items-center transition-transform duration-500 ease-out"
           style={{
             top: `${50 + stagePositionY}%`,
