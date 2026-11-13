@@ -8,6 +8,7 @@ const { WebSocketServer } = require('ws');
 const { createDefaultPlayback } = require('../shared/playbackDefaults');
 const { sanitizeStageSettings } = require('../shared/stageSettings');
 const { registerSyncRoutes } = require('./sync');
+const { createAutoNext } = require('./autoNext');
 
 const PORT = process.env.PORT || 8080;
 
@@ -169,6 +170,7 @@ registerSyncRoutes(app, {
     state.songs = songs;
     persist();
     broadcast({ type: 'songs', songs: state.songs });
+    autoNext.reschedule();
   },
   uploadsDir: UPLOADS_DIR,
   versionInfo: VERSION_INFO,
@@ -302,11 +304,13 @@ wss.on('connection', (ws) => {
       state.songs = msg.songs;
       persist();
       broadcast({ type: 'songs', songs: state.songs }, ws);
+      autoNext.reschedule();
     }
     if (msg.type === 'setPlayback' && msg.playback) {
       state.playback = { ...msg.playback, updatedAt: Date.now() };
       persist();
       broadcast({ type: 'playback', playback: state.playback }, ws);
+      autoNext.reschedule();
     }
   });
 
@@ -322,6 +326,18 @@ wss.on('connection', (ws) => {
     }
   });
 });
+
+// Loads the next song once the playing one is over (see server/autoNext.js)
+const autoNext = createAutoNext({
+  getPlayback: () => state.playback,
+  getSongs: () => state.songs,
+  applyPlayback: (playback) => {
+    state.playback = playback;
+    persist();
+    broadcast({ type: 'playback', playback: state.playback });
+  },
+});
+autoNext.reschedule();
 
 server.listen(PORT, () => {
   console.log(`Autolyrics ${VERSION_INFO.version}${VERSION_INFO.commit ? ` (${VERSION_INFO.commit})` : ''} läuft auf Port ${PORT}`);

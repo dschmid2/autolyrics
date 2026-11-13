@@ -35,7 +35,9 @@
       stageCommentWidthPercent: 20,
       stageLineSpacing: 24,
       stagePositionY: 0,
-      stageShowTitle: false
+      stageShowTitle: false,
+      autoNextSong: true,
+      autoNextDelaySeconds: 3
     },
     players: {},
     serverVersion: null,
