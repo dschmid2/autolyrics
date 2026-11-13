@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { computeElapsed } from '../lib/playback';
 import { getSongDuration, currentIndex, startedIndex } from '../lib/timing';
 
@@ -13,27 +13,33 @@ export function useElapsed(playback) {
   return elapsed;
 }
 
-export function useLineIndex(lines, playback, leadSeconds = 0) {
-  const getIndex = () => {
-    if (!lines || !lines.length) return -1;
-    const el = computeElapsed(playback) + leadSeconds;
-    return currentIndex(lines, el);
-  };
-
-  const [idx, setIdx] = useState(getIndex);
+// Value of `compute()` for the current render, plus a 100 ms ticker (only while
+// playing) that re-renders when the value changes. The value is computed during
+// render, never taken from state: a stale value from the previous song could
+// point to a line that the new song does not have.
+function useTickedValue(compute, playback, lines, intervalMs = 100) {
+  const value = compute();
+  const [, forceRender] = useState(0);
+  const latest = useRef({ compute, value });
+  latest.current = { compute, value };
 
   useEffect(() => {
-    setIdx(getIndex());
     if (playback.status !== 'playing' || !lines || !lines.length) return;
-
     const iv = setInterval(() => {
-      const nextIdx = getIndex();
-      setIdx((prev) => (prev !== nextIdx ? nextIdx : prev));
-    }, 100);
+      if (latest.current.compute() !== latest.current.value) forceRender((n) => n + 1);
+    }, intervalMs);
     return () => clearInterval(iv);
-  }, [playback, lines, leadSeconds]);
+  }, [playback, lines, intervalMs]);
 
-  return idx;
+  return value;
+}
+
+// Index of the line that is live right now (-1 = none)
+export function useLineIndex(lines, playback, leadSeconds = 0) {
+  return useTickedValue(() => {
+    if (!lines || !lines.length) return -1;
+    return currentIndex(lines, computeElapsed(playback) + leadSeconds);
+  }, playback, lines);
 }
 
 // Stage view line state:
@@ -42,49 +48,20 @@ export function useLineIndex(lines, playback, leadSeconds = 0) {
 //                 line 0 (shown grey until its time); after a line's duration
 //                 or the song end the view stays on the last started line.
 export function useStageLineState(lines, playback, leadSeconds = 0) {
-  const compute = () => {
+  const key = useTickedValue(() => {
     if (!lines || !lines.length) return '-1:0';
     const el = computeElapsed(playback) + leadSeconds;
     const active = currentIndex(lines, el);
     const position = active >= 0 ? active : Math.max(0, startedIndex(lines, el));
     return `${active}:${position}`;
-  };
-
-  const [key, setKey] = useState(compute);
-
-  useEffect(() => {
-    setKey(compute());
-    if (playback.status !== 'playing' || !lines || !lines.length) return;
-    const iv = setInterval(() => {
-      const next = compute();
-      setKey((prev) => (prev !== next ? next : prev));
-    }, 100);
-    return () => clearInterval(iv);
-  }, [playback, lines, leadSeconds]);
-
+  }, playback, lines);
   const [activeIdx, positionIdx] = key.split(':').map(Number);
   return { activeIdx, positionIdx };
 }
 
 export function useSongCompleted(lines, playback) {
-  const checkCompleted = () => {
+  return useTickedValue(() => {
     if (!lines || !lines.length) return false;
-    const dur = getSongDuration(lines);
-    return computeElapsed(playback) >= dur;
-  };
-
-  const [completed, setCompleted] = useState(checkCompleted);
-
-  useEffect(() => {
-    setCompleted(checkCompleted());
-    if (playback.status !== 'playing' || !lines || !lines.length) return;
-
-    const iv = setInterval(() => {
-      const nextCompleted = checkCompleted();
-      setCompleted((prev) => (prev !== nextCompleted ? nextCompleted : prev));
-    }, 200);
-    return () => clearInterval(iv);
-  }, [playback, lines]);
-
-  return completed;
+    return computeElapsed(playback) >= getSongDuration(lines);
+  }, playback, lines, 200);
 }

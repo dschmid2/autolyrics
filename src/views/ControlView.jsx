@@ -1,32 +1,75 @@
-import { useEffect, useRef } from 'react';
-import { Play, Pause, Square, SkipForward, Rewind, FastForward, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useTheme } from '../theme';
-import { getSongDuration, fmtTime } from '../lib/timing';
+import { getSongDuration } from '../lib/timing';
 import { useCurrentSong } from '../hooks/useCurrentSong';
+import { useIsPhone } from '../hooks/useMediaQuery';
 import { useLineIndex } from '../hooks/usePlaybackPosition';
-import { PlaybackClock } from './control/PlaybackClock';
 import { usePlaybackControls } from '../hooks/usePlaybackControls';
+import { LineList } from './control/LineList';
+import { LinePreview } from './control/LinePreview';
+import { SongList } from './control/SongList';
+import { TransportButtons } from './control/TransportButtons';
 
+// Operator screen. Phones get their own arrangement (PhoneLayout): collapsible
+// song picker on top, transport + live line pinned below the menu bar, and the
+// lines scrolling with the page.
 export function ControlView({ songs, playback, sendPlayback }) {
-  const { colors: COLORS, isDark } = useTheme();
   const { song, lines } = useCurrentSong(songs, playback);
-  const { loadSong, togglePlay, stop, nudge, playFrom } = usePlaybackControls(playback, sendPlayback);
+  const controls = usePlaybackControls(playback, sendPlayback);
   // Re-renders only when the active line changes; the running time is in PlaybackClock
   const idx = useLineIndex(lines, playback, 0);
-  const duration = getSongDuration(lines);
-
+  const isPhone = useIsPhone();
   const activeLineRef = useRef(null);
+  const pinnedRef = useRef(null);
 
   // Auto-scroll active lyric line into view if it changes
   useEffect(() => {
-    if (activeLineRef.current) {
-      activeLineRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest'
-      });
+    const el = activeLineRef.current;
+    if (!el) return;
+    if (!isPhone) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
     }
-  }, [idx]);
+    // Phones: the page scrolls and the pinned header covers the top. Only
+    // scroll if the line is outside the free area below it, then center it there.
+    const top = pinnedRef.current ? pinnedRef.current.getBoundingClientRect().bottom : 0;
+    const bottom = window.innerHeight;
+    const rect = el.getBoundingClientRect();
+    if (rect.top < top + 4 || rect.bottom > bottom - 4) {
+      const target = top + (bottom - top) / 2 - rect.height / 2;
+      window.scrollBy({ top: rect.top - target, behavior: 'smooth' });
+    }
+  }, [idx, isPhone]);
 
+  const shared = {
+    songs, playback, song, lines, idx, controls, activeLineRef, pinnedRef,
+    duration: getSongDuration(lines),
+  };
+  return isPhone ? <PhoneLayout {...shared} /> : <WideLayout {...shared} />;
+}
+
+function LinesHint({ song, lines }) {
+  const { colors: COLORS } = useTheme();
+  if (!song) {
+    return (
+      <div className="p-12 text-center rounded-2xl border-2 border-dashed border-black/10" style={{ color: COLORS.inkDim }}>
+        Wähle links einen Song aus, um die Zeilen und Steuerung anzuzeigen.
+      </div>
+    );
+  }
+  if (lines.length === 0) {
+    return (
+      <div className="p-12 text-center rounded-2xl" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
+        Dieser Song hat noch keine Textzeilen. Öffne den Song-Editor, um Text hinzuzufügen.
+      </div>
+    );
+  }
+  return null;
+}
+
+function WideLayout({ songs, playback, song, lines, idx, controls, activeLineRef, duration }) {
+  const { colors: COLORS } = useTheme();
   return (
     <div className="min-h-[calc(100vh-3.5rem)] pb-10" style={{ background: COLORS.panelBg }}>
       <div className="max-w-[1200px] w-full mx-auto p-4 md:px-8 space-y-6">
@@ -52,123 +95,12 @@ export function ControlView({ songs, playback, sendPlayback }) {
               </h2>
             </div>
 
-            {/* Main Playback Buttons */}
-            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap justify-center">
-              <button
-                onClick={() => nudge(-5)}
-                disabled={!song}
-                aria-label="5 Sekunden zurück"
-                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
-                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
-                title="5 Sekunden zurück (Schnellvorlauf)"
-              >
-                <Rewind size={16} className="sm:w-4 sm:h-4" color={COLORS.ink} />
-                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>-5s</span>
-              </button>
-
-              <button
-                onClick={() => nudge(-1)}
-                disabled={!song}
-                aria-label="1 Sekunde zurück"
-                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
-                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
-                title="1 Sekunde zurück"
-              >
-                <ChevronLeft size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
-                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>-1s</span>
-              </button>
-
-              <button
-                onClick={togglePlay}
-                disabled={!song}
-                aria-label={playback.status === 'playing' ? 'Pause und Schwarz' : 'Start'}
-                className="p-3.5 sm:p-5 rounded-full shadow-md hover:scale-105 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none"
-                style={{ background: COLORS.amber }}
-                title={playback.status === 'playing' ? 'Pausieren (Projektion wird schwarz)' : 'Abspielen'}
-              >
-                {playback.status === 'playing' ? (
-                  <Pause size={24} className="sm:w-7 sm:h-7" color="#241a08" />
-                ) : (
-                  <Play size={24} className="sm:w-7 sm:h-7 translate-x-0.5" color="#241a08" />
-                )}
-              </button>
-
-              <button
-                onClick={() => nudge(1)}
-                disabled={!song}
-                aria-label="1 Sekunde vor"
-                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
-                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
-                title="1 Sekunde vor"
-              >
-                <ChevronRight size={18} className="sm:w-5 sm:h-5" color={COLORS.ink} />
-                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>+1s</span>
-              </button>
-
-              <button
-                onClick={() => nudge(5)}
-                disabled={!song}
-                aria-label="5 Sekunden vor"
-                className="p-2 sm:p-2.5 rounded-full hover:opacity-80 active:scale-95 transition disabled:opacity-30 disabled:pointer-events-none flex flex-col items-center justify-center min-w-[2.5rem] sm:min-w-[2.75rem] border"
-                style={{ background: COLORS.cardBg, borderColor: COLORS.line }}
-                title="5 Sekunden vor (Schnellvorlauf)"
-              >
-                <FastForward size={16} className="sm:w-4 sm:h-4" color={COLORS.ink} />
-                <span className="text-[9px] font-mono font-bold leading-none -mt-0.5" style={{ color: COLORS.inkDim }}>+5s</span>
-              </button>
-
-              <button
-                onClick={stop}
-                disabled={!song}
-                className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition hover:opacity-80 active:scale-95 disabled:opacity-30 disabled:pointer-events-none border"
-                style={{ background: COLORS.cardBg, borderColor: COLORS.line, color: COLORS.inkDim }}
-                title="Stoppt die Wiedergabe und schaltet die Projektion schwarz"
-              >
-                <Square size={13} />
-                <span className="hidden sm:inline">Stopp &amp; Schwarz</span>
-                <span className="sm:hidden">Stopp</span>
-              </button>
-
-              {songs.length > 1 && (
-                <button
-                  onClick={() => {
-                    const currentIdx = songs.findIndex((s) => s.id === playback.songId);
-                    if (currentIdx !== -1) {
-                      const nextIdx = (currentIdx + 1) % songs.length;
-                      loadSong(songs[nextIdx]);
-                    }
-                  }}
-                  className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition hover:opacity-90 active:scale-95"
-                  style={{ background: COLORS.amber, color: '#241a08' }}
-                  title="Nächsten Song aus der Liste laden"
-                >
-                  <span className="hidden sm:inline">Nächster Song</span>
-                  <span className="sm:hidden">Weiter</span>
-                  <SkipForward size={13} />
-                </button>
-              )}
-            </div>
+            <TransportButtons song={song} songs={songs} playback={playback} controls={controls} />
 
           </div>
 
-          {/* Current Live Line Preview Banner */}
           {song && (
-            <div className="rounded-xl p-4 shadow-inner" style={{ background: isDark ? '#0A0A0D' : COLORS.ink }}>
-              <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
-                <span className="text-xs uppercase tracking-wider font-semibold opacity-70" style={{ color: COLORS.line }}>
-                  {playback.status === 'playing' ? 'Aktuelle Zeile (Live)' : 'Status'}
-                </span>
-                <PlaybackClock playback={playback} song={song} duration={duration} />
-              </div>
-              <div className="text-lg sm:text-xl font-bold min-h-[1.75rem]" style={{ color: COLORS.stageText }}>
-                {idx >= 0 ? lines[idx].en : (playback.status === 'playing' ? '…' : '— Schwarz —')}
-              </div>
-              {idx >= 0 && lines[idx].de && (
-                <div className="text-sm mt-0.5" style={{ color: COLORS.line }}>
-                  {lines[idx].de}
-                </div>
-              )}
-            </div>
+            <LinePreview song={song} lines={lines} idx={idx} playback={playback} duration={duration} />
           )}
         </div>
 
@@ -183,34 +115,12 @@ export function ControlView({ songs, playback, sendPlayback }) {
               </span>
             </div>
 
-            <div className="space-y-2 max-h-48 md:max-h-[calc(100vh-22rem)] overflow-y-auto pr-1">
-              {songs.map((s) => {
-                const isSelected = s.id === playback.songId;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => loadSong(s)}
-                    className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between transition-all border ${
-                      isSelected
-                        ? 'shadow-md font-bold border-amber-500/50'
-                        : 'opacity-85 hover:opacity-100 border-transparent hover:border-black/5 dark:hover:border-white/5'
-                    }`}
-                    style={{
-                      background: isSelected ? COLORS.amber : COLORS.panelBg2,
-                      color: isSelected ? '#241a08' : COLORS.ink,
-                    }}
-                  >
-                    <span className="truncate pr-2 font-medium">{s.title}</span>
-                    <span className="text-xs font-mono shrink-0 opacity-70">{s.bpm} BPM</span>
-                  </button>
-                );
-              })}
-              {songs.length === 0 && (
-                <div className="text-sm py-4 text-center rounded-xl p-3" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
-                  Keine Songs vorhanden.
-                </div>
-              )}
-            </div>
+            <SongList
+              songs={songs}
+              selectedId={playback.songId}
+              onSelect={controls.loadSong}
+              className="space-y-2 max-h-48 md:max-h-[calc(100vh-22rem)] overflow-y-auto pr-1"
+            />
           </div>
 
           {/* CENTER: Lyrics Lines with scroll & jump to line */}
@@ -226,76 +136,88 @@ export function ControlView({ songs, playback, sendPlayback }) {
               )}
             </div>
 
-            {!song ? (
-              <div className="p-12 text-center rounded-2xl border-2 border-dashed border-black/10" style={{ color: COLORS.inkDim }}>
-                Wähle links einen Song aus, um die Zeilen und Steuerung anzuzeigen.
-              </div>
-            ) : lines.length === 0 ? (
-              <div className="p-12 text-center rounded-2xl" style={{ background: COLORS.panelBg2, color: COLORS.inkDim }}>
-                Dieser Song hat noch keine Textzeilen. Öffne den Song-Editor, um Text hinzuzufügen.
-              </div>
+            {(!song || lines.length === 0) ? (
+              <LinesHint song={song} lines={lines} />
             ) : (
-              <div
-                className="max-h-[calc(100vh-22rem)] overflow-y-auto rounded-2xl p-2 space-y-1.5 shadow-sm border"
-                style={{ background: COLORS.panelBg2, borderColor: COLORS.line }}
-              >
-                {lines.map((l, i) => {
-                  const isActive = i === idx;
-                  return (
-                    <button
-                      key={l.id}
-                      ref={isActive ? activeLineRef : null}
-                      onClick={() => playFrom(l.t)}
-                      className={`w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all border ${
-                        isActive
-                          ? 'shadow-md scale-[1.01] border-amber-500/50'
-                          : 'border-transparent hover:opacity-90'
-                      }`}
-                      style={{
-                        background: isActive ? COLORS.amber : COLORS.cardBg,
-                        color: isActive ? '#241a08' : COLORS.ink,
-                      }}
-                    >
-                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70" style={{ background: COLORS.line, color: COLORS.ink }}>
-                        {fmtTime(l.t)}
-                      </span>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-base leading-snug ${isActive ? 'font-bold' : 'font-semibold'}`}>
-                            {l.en}
-                          </span>
-                          {l.comment && (
-                            <span className="text-xs font-normal px-1.5 py-0.2 rounded opacity-75" style={{ background: COLORS.line, color: COLORS.ink }}>
-                              [{l.comment}]
-                            </span>
-                          )}
-                          {l.stageOnly && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-500/20 text-red-600 dark:text-red-400">
-                              Nur Stage
-                            </span>
-                          )}
-                        </div>
-                        {l.de && (
-                          <div className={`text-xs mt-0.5 opacity-80 ${isActive ? 'font-medium' : ''}`}>
-                            {l.de}
-                          </div>
-                        )}
-                      </div>
-
-                      <span
-                        className="font-mono text-xs font-semibold px-2 py-0.5 rounded shrink-0 pt-1 opacity-70 whitespace-nowrap self-start"
-                        style={{ background: COLORS.line, color: COLORS.ink }}
-                        title={`Takt ${l.bar}/${l.beat}`}
-                      >
-                        Takt {l.bar}/{l.beat}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <LineList lines={lines} idx={idx} onPlayFrom={controls.playFrom} activeRef={activeLineRef} />
             )}
           </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+function PhoneLayout({ songs, playback, song, lines, idx, controls, activeLineRef, pinnedRef, duration }) {
+  const { colors: COLORS } = useTheme();
+  // null = automatic: open only while no song is loaded (the songs arrive after
+  // the first render). Tapping the header or picking a song sets it explicitly.
+  const [pickerChoice, setPickerChoice] = useState(null);
+  const pickerOpen = pickerChoice !== null ? pickerChoice : !song;
+  const selectSong = (s) => {
+    controls.loadSong(s);
+    setPickerChoice(false);
+  };
+
+  return (
+    <div className="min-h-[calc(100vh-3.5rem)] pb-10" style={{ background: COLORS.panelBg }}>
+      <div className="p-3">
+
+        {/* Collapsible song picker */}
+        <div className="rounded-xl mb-2" style={{ background: COLORS.panelBg2 }}>
+          <button
+            type="button"
+            onClick={() => setPickerChoice(!pickerOpen)}
+            aria-expanded={pickerOpen}
+            className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left"
+          >
+            <span className="min-w-0 flex items-baseline gap-2">
+              <span className="text-[11px] uppercase tracking-wider font-bold shrink-0" style={{ color: COLORS.inkDim }}>
+                Lieder ({songs.length})
+              </span>
+              <span className="text-sm font-semibold truncate" style={{ color: COLORS.ink }}>
+                {song ? song.title : 'Kein Song ausgewählt'}
+              </span>
+            </span>
+            {pickerOpen
+              ? <ChevronUp size={18} className="shrink-0" color={COLORS.ink} />
+              : <ChevronDown size={18} className="shrink-0" color={COLORS.ink} />}
+          </button>
+          {pickerOpen && (
+            <SongList
+              songs={songs}
+              selectedId={playback.songId}
+              onSelect={selectSong}
+              className="space-y-1.5 max-h-[50vh] overflow-y-auto px-2 pb-2"
+            />
+          )}
+        </div>
+
+        {/* Pinned below the menu bar (h-14): transport and the live line */}
+        <div
+          ref={pinnedRef}
+          className="sticky top-14 z-30 -mx-3 px-3 py-2 space-y-2 border-b shadow-sm"
+          style={{ background: COLORS.panelBg, borderColor: COLORS.line }}
+        >
+          <TransportButtons song={song} songs={songs} playback={playback} controls={controls} compact />
+          {song && (
+            <LinePreview song={song} lines={lines} idx={idx} playback={playback} duration={duration} compact />
+          )}
+        </div>
+
+        {/* Lines scroll with the page */}
+        <div className="pt-3 space-y-2">
+          {song && lines.length > 0 && (
+            <div className="text-[11px] uppercase tracking-wider font-bold" style={{ color: COLORS.inkDim }}>
+              Songzeilen ({lines.length}) – Tippen startet ab der Zeile
+            </div>
+          )}
+          {(!song || lines.length === 0) ? (
+            <LinesHint song={song} lines={lines} />
+          ) : (
+            <LineList lines={lines} idx={idx} onPlayFrom={controls.playFrom} activeRef={activeLineRef} compact />
+          )}
         </div>
 
       </div>
