@@ -35,12 +35,13 @@ async function post(path, body) {
   return data;
 }
 
-// Compares the songs of the instance at `url` with the local ones
-export function previewSync(url) {
-  return post('/api/sync/preview', { url });
+// Compares the songs of the instance at `url` with the local ones.
+// `password`: that instance's AUTOLYRICS_PASSWORD, if it has one (never stored).
+export function previewSync(url, password) {
+  return post('/api/sync/preview', { url, password: password || undefined });
 }
 
 // Imports the songs with the given ids (and their audio files if wanted)
-export function importFromInstance(url, songIds, includeAudio) {
-  return post('/api/sync/import', { url, songIds, includeAudio });
+export function importFromInstance(url, songIds, includeAudio, password) {
+  return post('/api/sync/import', { url, songIds, includeAudio, password: password || undefined });
 }

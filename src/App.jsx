@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ThemeContext, useThemeState } from './theme';
 import { ConnectionBadge } from './components/ConnectionBadge';
 import { GlobalStyles } from './components/GlobalStyles';
@@ -29,7 +29,9 @@ export default function App() {
     sendPlayerName,
     sendPlayerStageSettings,
     sendDeletePlayer,
-    serverVersion
+    serverVersion,
+    authRequired,
+    canControl
   } = useSyncedState();
 
   const localPlayer = players[playerId] || null;
@@ -57,11 +59,17 @@ export default function App() {
     display = stage;
   }
 
+  // Operator views need the login (server/auth.js). Displays work without it.
+  const needsLogin = !display && authRequired && canControl === false;
+  useEffect(() => {
+    if (needsLogin) window.location.assign('/login?next=%2F');
+  }, [needsLogin]);
+
   return (
     <ThemeContext.Provider value={themeState}>
       <ConnectionBadge connected={connected} />
       <GlobalStyles />
-      {display || (
+      {needsLogin ? null : display || (
         <div className="min-h-screen" style={{ background: themeState.colors.panelBg }}>
           <TopMenuBar
             activeView={view}
@@ -70,6 +78,7 @@ export default function App() {
             onGotoStage={() => navigate('stage')}
             playersCount={Object.keys(players).length}
             serverVersion={serverVersion}
+            showLogout={authRequired}
           />
           {view === 'editor' ? (
             <EditorView

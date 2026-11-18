@@ -29,12 +29,26 @@ function userError(message) {
   return err;
 }
 
-async function fetchRemoteSongs(origin) {
+// Header for an instance with password protection (AUTOLYRICS_PASSWORD there)
+function authHeaders(remotePassword) {
+  return remotePassword ? { Authorization: `Bearer ${remotePassword}` } : {};
+}
+
+async function fetchRemoteSongs(origin, remotePassword) {
   let res;
   try {
-    res = await fetch(`${origin}/api/export`, { signal: AbortSignal.timeout(JSON_TIMEOUT_MS), redirect: 'error' });
+    res = await fetch(`${origin}/api/export`, {
+      signal: AbortSignal.timeout(JSON_TIMEOUT_MS),
+      redirect: 'error',
+      headers: authHeaders(remotePassword),
+    });
   } catch (err) {
     throw userError(describeFetchError(err, origin));
+  }
+  if (res.status === 401) {
+    throw userError(remotePassword
+      ? 'Das Passwort für die andere Instanz ist falsch.'
+      : 'Die andere Instanz ist mit einem Passwort geschützt. Bitte ihr Passwort angeben.');
   }
   if (res.status === 404) {
     throw userError('Die andere Instanz bietet kein Songpaket an (Autolyrics dort zu alt?).');
@@ -55,12 +69,13 @@ async function fetchRemoteSongs(origin) {
 
 // Downloads one audio file into uploadsDir (via a temp file, so a broken
 // transfer never leaves a half-written MP3 behind)
-async function downloadAudio(origin, fileName, uploadsDir) {
+async function downloadAudio(origin, fileName, uploadsDir, remotePassword) {
   const target = path.join(uploadsDir, fileName);
   const tmp = `${target}.part-${process.pid}`;
   const res = await fetch(`${origin}/uploads/${encodeURIComponent(fileName)}`, {
     signal: AbortSignal.timeout(AUDIO_TIMEOUT_MS),
     redirect: 'error',
+    headers: authHeaders(remotePassword),
   });
   if (!res.ok || !res.body) throw new Error(`Fehler ${res.status}`);
   let bytes = 0;
@@ -79,19 +94,26 @@ async function downloadAudio(origin, fileName, uploadsDir) {
   }
 }
 
-function registerSyncRoutes(app, { getSongs, setSongs, uploadsDir, versionInfo }) {
+// Password of the other instance, as typed in the sync form (never stored)
+function remotePasswordOf(body) {
+  const value = body && body.password;
+  return typeof value === 'string' && value.length > 0 && value.length <= 1000 ? value : null;
+}
+
+function registerSyncRoutes(app, { getSongs, setSongs, uploadsDir, versionInfo, auth }) {
   const hasLocalAudioFile = (fileName) => fs.existsSync(path.join(uploadsDir, fileName));
   const json = express.json({ limit: '1mb' });
   let importRunning = false;
 
-  app.get('/api/export', (req, res) => {
+  // Another instance pulls with "Authorization: Bearer <password>" (see server/auth.js)
+  app.get('/api/export', auth.requireLoginOrBearer, (req, res) => {
     res.json(buildExport(getSongs(), versionInfo));
   });
 
-  app.post('/api/sync/preview', json, async (req, res) => {
+  app.post('/api/sync/preview', auth.requireLoginApi, json, async (req, res) => {
     try {
       const origin = normalizeInstanceUrl(req.body && req.body.url);
-      const remote = await fetchRemoteSongs(origin);
+      const remote = await fetchRemoteSongs(origin, remotePasswordOf(req.body));
       res.json({
         origin,
         appVersion: remote.appVersion,
@@ -102,7 +124,7 @@ function registerSyncRoutes(app, { getSongs, setSongs, uploadsDir, versionInfo }
     }
   });
 
-  app.post('/api/sync/import', json, async (req, res) => {
+  app.post('/api/sync/import', auth.requireLoginApi, json, async (req, res) => {
     if (importRunning) {
       res.status(409).json({ error: 'Es läuft bereits ein Import.' });
       return;
@@ -113,7 +135,8 @@ function registerSyncRoutes(app, { getSongs, setSongs, uploadsDir, versionInfo }
       const origin = normalizeInstanceUrl(body.url);
       const includeAudio = body.includeAudio !== false;
       const selectedIds = Array.isArray(body.songIds) ? body.songIds.filter((id) => typeof id === 'string') : null;
-      const remote = await fetchRemoteSongs(origin);
+      const remotePassword = remotePasswordOf(body);
+      const remote = await fetchRemoteSongs(origin, remotePassword);
       const selected = selectedIds ? new Set(selectedIds) : null;
 
       // 1. Audio first, so songs never point to files that are not there yet
@@ -128,7 +151,7 @@ function registerSyncRoutes(app, { getSongs, setSongs, uploadsDir, versionInfo }
         });
         for (const fileName of wanted) {
           try {
-            await downloadAudio(origin, fileName, uploadsDir);
+            await downloadAudio(origin, fileName, uploadsDir, remotePassword);
             audioDownloaded.push(fileName);
           } catch (err) {
             audioFailed.push({ fileName, error: err.message });

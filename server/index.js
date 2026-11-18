@@ -9,6 +9,7 @@ const { createDefaultPlayback } = require('../shared/playbackDefaults');
 const { sanitizeStageSettings } = require('../shared/stageSettings');
 const { registerSyncRoutes } = require('./sync');
 const { createAutoNext } = require('./autoNext');
+const { createAuth } = require('./auth');
 
 const PORT = process.env.PORT || 8080;
 
@@ -149,13 +150,21 @@ function persist() {
   }, 150);
 }
 
+// Login for the operator UI (only if AUTOLYRICS_PASSWORD is set, see server/auth.js)
+const auth = createAuth({ password: process.env.AUTOLYRICS_PASSWORD, dataDir: DATA_DIR });
+const INDEX_HTML = path.join(__dirname, '..', 'public', 'index.html');
+
 const app = express();
-app.use(express.static(path.join(__dirname, '..', 'public')));
-app.use('/uploads', express.static(UPLOADS_DIR));
+auth.registerRoutes(app);
+// Operator UI: login required. Must come before express.static, which would
+// otherwise serve index.html for "/" by itself.
+app.get(['/', '/index.html'], auth.requireLoginPage, (req, res) => res.sendFile(INDEX_HTML));
+app.use(express.static(path.join(__dirname, '..', 'public'), { index: false }));
+app.use('/uploads', auth.requireLoginOrBearer, express.static(UPLOADS_DIR));
 app.get('/healthz', (req, res) => res.json({ ok: true, version: VERSION_INFO.version }));
 app.get('/api/version', (req, res) => res.json(VERSION_INFO));
 
-app.post('/api/upload', upload.single('audio'), (req, res) => {
+app.post('/api/upload', auth.requireLoginApi, upload.single('audio'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Keine Datei hochgeladen' });
   }
@@ -174,11 +183,12 @@ registerSyncRoutes(app, {
   },
   uploadsDir: UPLOADS_DIR,
   versionInfo: VERSION_INFO,
+  auth,
 });
 
-// Routing for direct access to /live, /stage, and /player
+// Display views: reachable without login (their WebSocket is read-only)
 app.get(['/live', '/stage', '/player'], (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  res.sendFile(INDEX_HTML);
 });
 
 const server = http.createServer(app);
@@ -209,9 +219,14 @@ const heartbeatInterval = setInterval(() => {
 
 wss.on('close', () => clearInterval(heartbeatInterval));
 
-wss.on('connection', (ws) => {
+// Messages a connection without login may send (displays): everything else
+// changes songs, playback or players and needs the operator login.
+const READ_ONLY_MESSAGES = new Set(['ping', 'pong', 'registerPlayer']);
+
+wss.on('connection', (ws, req) => {
   let boundPlayerId = null;
   ws.isAlive = true;
+  const canControl = auth.hasSession(req) && auth.isSameOrigin(req);
 
   ws.on('pong', () => {
     ws.isAlive = true;
@@ -225,13 +240,20 @@ wss.on('connection', (ws) => {
     serverIp: getLocalIpAddress(),
     serverPort: PORT,
     serverNow: Date.now(),
-    serverVersion: VERSION_INFO.version
+    serverVersion: VERSION_INFO.version,
+    authRequired: auth.enabled,
+    canControl,
   }));
 
   ws.on('message', (raw) => {
     ws.isAlive = true;
     let msg;
     try { msg = JSON.parse(raw); } catch (e) { return; }
+    if (!msg || typeof msg !== 'object') return;
+    if (!canControl && !READ_ONLY_MESSAGES.has(msg.type)) {
+      try { ws.send(JSON.stringify({ type: 'error', code: 'not_authenticated', message: 'Nicht angemeldet' })); } catch (e) {}
+      return;
+    }
 
     if (msg.type === 'ping') {
       // Echo the client's send time plus our clock so clients can sync to server time
@@ -338,6 +360,10 @@ const autoNext = createAutoNext({
   },
 });
 autoNext.reschedule();
+
+if (!auth.enabled) {
+  console.warn('Hinweis: AUTOLYRICS_PASSWORD ist nicht gesetzt – die Steuerung ist ohne Anmeldung erreichbar.');
+}
 
 server.listen(PORT, () => {
   console.log(`Autolyrics ${VERSION_INFO.version}${VERSION_INFO.commit ? ` (${VERSION_INFO.commit})` : ''} läuft auf Port ${PORT}`);

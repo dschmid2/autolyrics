@@ -144,6 +144,20 @@ autolyrics/
    ```
    Die Anwendung läuft standardmäßig unter `http://localhost:8080`.
 
+### Anmeldung (Passwort)
+
+Mit der Umgebungsvariable `AUTOLYRICS_PASSWORD` ist die Steuerung (Steuerung, Song-Editor, Player-Verwaltung, Einstellungen) nur nach Anmeldung erreichbar:
+
+```bash
+docker run -e AUTOLYRICS_PASSWORD='geheim' -p 8080:8080 -v ./data:/data ghcr.io/dschmid2/autolyrics
+```
+
+* Die Anzeigen `/live`, `/stage` und `/player` funktionieren weiterhin **ohne** Anmeldung (z. B. auf den iPads), können aber nichts verändern.
+* Die Anmeldung gilt 30 Tage pro Browser. Abmelden über das Symbol oben rechts. Ein geändertes Passwort meldet alle Browser ab.
+* Synchronisation: Ist die andere Instanz geschützt, deren Passwort im Sync-Abschnitt des Song-Editors angeben.
+* Ohne die Variable bleibt alles offen wie bisher (der Server weist beim Start darauf hin).
+* Die Anmeldung schützt nicht vor Mitlesen im Netzwerk. Wird die Instanz über das Internet erreicht, gehört sie hinter HTTPS (z. B. Reverse Proxy).
+
 ### Versionierung
 
 Die Version hat das Format `<Major>.<Minor>.<Build>`, z. B. `1.1.57`:
