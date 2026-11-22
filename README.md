@@ -79,6 +79,17 @@ Die Anwendung ist als Lightweight-Fullstack-Webanwendung aufgebaut:
   * **HTML5 Canvas & Web Audio API**: Dekodierung von MP3-Dateien und Rendering der Wellenform-Visualisierung.
   * **esbuild**: Schnelles Bündeln des JavaScript-Codes.
 
+### Einsatz-Setup (Hardware & Netzwerk)
+
+![Einsatz-Setup der Lyrics-Projektion](docs/architektur.svg)
+
+* **Server-Pi**: Raspberry Pi mit DietPi und Docker. Darin laufen der autolyrics-Container und Portainer zur Verwaltung. Per LAN am Router angeschlossen.
+* **WLAN-Router**: Zentraler Knoten des Netzwerks. Per LAN hängen der Server-Pi und der Beamer daran, alle anderen Geräte per WLAN.
+* **Live-Player**: Raspberry Pi mit Raspberry Pi OS Lite und Chrome im Kiosk-Modus, zeigt die Projektion (`/live`) per HDMI auf dem Beamer.
+* **Stage-Player Solo und Chor**: Je ein Raspberry Pi mit Raspberry Pi OS Lite und Chrome im Kiosk-Modus, zeigt die Bühnenanzeige (`/stage`) per HDMI auf einem eigenen Bildschirm, einer für den Solo-Sänger und einer für den Chor.
+* **Beamer**: Bekommt das Bild per HDMI vom Live-Player und ist zusätzlich per LAN am Router, damit er über das Netzwerk gesteuert werden kann.
+* **Steuerung**: Laptop oder iPad im WLAN, bedient autolyrics im Browser.
+
 ---
 
 ## Projektstruktur
@@ -90,6 +101,8 @@ autolyrics/
 │   ├── playback.json      # Wiedergabestatus & Anzeige-Einstellungen
 │   ├── players.json       # Registrierte Endgeräte (Player)
 │   └── uploads/           # Hochgeladene MP3-Dateien
+├── docs/
+│   └── architektur.svg    # Grafik des Einsatz-Setups (Hardware & Netzwerk)
 ├── public/                # Statische Web-Assets & gebündelter Output
 │   ├── bundle.js          # Gebündeltes Frontend-JavaScript
 │   ├── index.html         # HTML-Einstiegspunkt
