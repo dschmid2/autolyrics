@@ -179,6 +179,21 @@ export function useSyncedState() {
     }
   }, []);
 
+  // Keystone correction of a projector device (shared/keystone.js); null removes it
+  const sendPlayerKeystone = useCallback((targetPlayerId, keystone) => {
+    // Optimistic local update so dragging the corners feels immediate
+    setPlayers((prev) => {
+      if (!prev[targetPlayerId]) return prev;
+      const next = { ...prev[targetPlayerId] };
+      if (keystone) next.keystone = keystone;
+      else delete next.keystone;
+      return { ...prev, [targetPlayerId]: next };
+    });
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'setPlayerKeystone', playerId: targetPlayerId, keystone: keystone || null }));
+    }
+  }, []);
+
   const sendDeletePlayer = useCallback((targetPlayerId) => {
     if (wsRef.current && wsRef.current.readyState === 1) {
       wsRef.current.send(JSON.stringify({ type: 'deletePlayer', playerId: targetPlayerId }));
@@ -196,6 +211,7 @@ export function useSyncedState() {
     sendPlayerRole,
     sendPlayerName,
     sendPlayerStageSettings,
+    sendPlayerKeystone,
     sendDeletePlayer,
     serverIp,
     serverPort,

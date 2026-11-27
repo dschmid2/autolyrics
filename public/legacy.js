@@ -617,14 +617,17 @@
       ].join('\n');
     }
 
-    var html = [
-      renderConnectionBadge(),
+    var viewHtml = [
       '<div id="projection-container" class="legacy-cursor-none" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: ' + COLORS.stageBg + '; overflow: hidden; -webkit-user-select: none; user-select: none;">',
       contentHtml,
       renderHeartbeat(song, playback, isSongCompleted, isBlackout),
       '  <button id="legacy-fs-btn" style="position: fixed; top: 16px; left: 16px; background: transparent; border: 1px solid #71717a; color: #71717a; border-radius: 4px; padding: 6px 10px; font-size: 12px; cursor: pointer; opacity: 0.1; z-index: 100;">Vollbild</button>',
       '</div>'
     ].join('\n');
+
+    // Keystone correction only if enabled for this device; otherwise unchanged
+    var keystone = getLocalKeystone();
+    var html = renderConnectionBadge() + '\n' + (keystone ? wrapInKeystone(viewHtml, keystone) : viewHtml);
 
     if (!setRootHtml(html)) return;
 
@@ -663,6 +666,66 @@
 
   // Stage settings of this device (players[id].stageSettings) override the global ones
   var PLAYER_STAGE_SETTING_KEYS = ['stageFontSize', 'stageCommentWidthPercent', 'stagePositionY'];
+
+  // --- Keystone correction for /live (mirrors shared/keystone.js) ---
+  var KEYSTONE_CORNER_KEYS = ['tl', 'tr', 'br', 'bl'];
+
+  // Keystone settings of this device, or null if not enabled
+  function getLocalKeystone() {
+    var player = state.players && state.players[state.playerId];
+    var k = player && player.keystone;
+    return k && k.enabled && k.corners ? k : null;
+  }
+
+  // CSS matrix3d() mapping a width x height element onto the quad "corners"
+  // (fractions of width/height), transform-origin 0 0
+  function keystoneMatrix3d(corners, width, height) {
+    var p = [];
+    for (var i = 0; i < KEYSTONE_CORNER_KEYS.length; i++) {
+      var c = corners[KEYSTONE_CORNER_KEYS[i]] || [0, 0];
+      p.push([Number(c[0]) * width, Number(c[1]) * height]);
+    }
+    var x0 = p[0][0], y0 = p[0][1], x1 = p[1][0], y1 = p[1][1];
+    var x2 = p[2][0], y2 = p[2][1], x3 = p[3][0], y3 = p[3][1];
+    var dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
+    var dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+    var det = dx1 * dy2 - dx2 * dy1;
+    var a, b, c0, d, e, f, g, h;
+    if ((dx3 === 0 && dy3 === 0) || Math.abs(det) < 1e-9) {
+      a = x1 - x0; b = x3 - x0; c0 = x0; d = y1 - y0; e = y3 - y0; f = y0; g = 0; h = 0;
+    } else {
+      g = (dx3 * dy2 - dx2 * dy3) / det;
+      h = (dx1 * dy3 - dx3 * dy1) / det;
+      a = x1 - x0 + g * x1; b = x3 - x0 + h * x3; c0 = x0;
+      d = y1 - y0 + g * y1; e = y3 - y0 + h * y3; f = y0;
+    }
+    var m = [a / width, d / width, 0, g / width, b / height, e / height, 0, h / height, 0, 0, 1, 0, c0, f, 0, 1];
+    for (var j = 0; j < m.length; j++) m[j] = +m[j].toFixed(10);
+    return 'matrix3d(' + m.join(',') + ')';
+  }
+
+  function keystoneGridHtml() {
+    var lines = '';
+    for (var i = 1; i < 10; i++) {
+      lines += '<line x1="' + (i * 10) + '" y1="0" x2="' + (i * 10) + '" y2="100" vector-effect="non-scaling-stroke" />';
+      lines += '<line x1="0" y1="' + (i * 10) + '" x2="100" y2="' + (i * 10) + '" vector-effect="non-scaling-stroke" />';
+    }
+    return '<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 40;">' +
+      '<svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" viewBox="0 0 100 100" preserveAspectRatio="none">' +
+      '<g stroke="#F4EFE4" stroke-opacity="0.35" stroke-width="1">' + lines + '</g>' +
+      '<g stroke="#D89A3E" stroke-width="3" fill="none"><rect x="0" y="0" width="100" height="100" vector-effect="non-scaling-stroke" />' +
+      '<line x1="50" y1="40" x2="50" y2="60" vector-effect="non-scaling-stroke" /><line x1="40" y1="50" x2="60" y2="50" vector-effect="non-scaling-stroke" /></g></svg>' +
+      '<svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">' +
+      '<circle cx="50" cy="50" r="40" fill="none" stroke="#D89A3E" stroke-width="2" vector-effect="non-scaling-stroke" /></svg></div>';
+  }
+
+  function wrapInKeystone(viewHtml, keystone) {
+    var w = window.innerWidth, hgt = window.innerHeight;
+    var t = keystoneMatrix3d(keystone.corners, w, hgt);
+    return '<div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; background: #000;">' +
+      '<div style="position: absolute; left: 0; top: 0; width: ' + w + 'px; height: ' + hgt + 'px; -webkit-transform-origin: 0 0; transform-origin: 0 0; -webkit-transform: ' + t + '; transform: ' + t + ';">' +
+      viewHtml + (keystone.showGrid ? keystoneGridHtml() : '') + '</div></div>';
+  }
 
   function getStagePlayback() {
     var player = state.players && state.players[state.playerId];

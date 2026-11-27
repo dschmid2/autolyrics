@@ -28,6 +28,7 @@ export default function App() {
     sendPlayerRole,
     sendPlayerName,
     sendPlayerStageSettings,
+    sendPlayerKeystone,
     sendDeletePlayer,
     serverVersion,
     authRequired,
@@ -43,7 +44,7 @@ export default function App() {
   );
 
   const exitToControl = () => navigate('control');
-  const projection = <ProjectionView songs={songs} playback={playback} onExit={exitToControl} connected={connected} />;
+  const projection = <ProjectionView songs={songs} playback={playback} onExit={exitToControl} connected={connected} keystone={localPlayer && localPlayer.keystone} />;
   const stage = <StageView songs={songs} playback={stagePlayback} onExit={exitToControl} />;
 
   // Display devices: /player shows the view of the role the operator assigned
@@ -97,6 +98,7 @@ export default function App() {
               onSetPlayerRole={sendPlayerRole}
               onSetPlayerName={sendPlayerName}
               onSetPlayerStageSettings={sendPlayerStageSettings}
+              onSetPlayerKeystone={sendPlayerKeystone}
               onDeletePlayer={sendDeletePlayer}
             />
           ) : (

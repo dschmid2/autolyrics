@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 import { useTheme } from '../theme';
 import { PLAYER_STAGE_SETTINGS, getSetting } from '../lib/playback';
+import { PlayerKeystone } from './players/PlayerKeystone';
 
 export function PlayerStageSettings({ player, playback, onChange }) {
   const { colors: COLORS, isDark } = useTheme();
@@ -147,7 +148,7 @@ function RoleButton({ active, muted, isDark, onClick, children }) {
   );
 }
 
-export function PlayersView({ players = {}, playback = {}, localPlayerId, onSetPlayerRole, onSetPlayerName, onSetPlayerStageSettings, onDeletePlayer }) {
+export function PlayersView({ players = {}, playback = {}, localPlayerId, onSetPlayerRole, onSetPlayerName, onSetPlayerStageSettings, onSetPlayerKeystone, onDeletePlayer }) {
   const { colors: COLORS, isDark } = useTheme();
   const playerList = Object.values(players);
 
@@ -237,6 +238,11 @@ export function PlayersView({ players = {}, playback = {}, localPlayerId, onSetP
                       player={p}
                       playback={playback}
                       onChange={(stageSettings) => onSetPlayerStageSettings(p.id, stageSettings)}
+                    />
+
+                    <PlayerKeystone
+                      player={p}
+                      onChange={(keystone) => onSetPlayerKeystone(p.id, keystone)}
                     />
                   </div>
                 );

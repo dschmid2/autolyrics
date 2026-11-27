@@ -31,6 +31,7 @@ Autolyrics bietet verschiedene spezialisierte Ansichten, die über das Netzwerk 
 * **Universelle Mobilgeräte-Ansicht**: Jedes Gerät generiert eine eindeutige ID (GUID in `localStorage`).
 * **Dynamische Rollenzuweisung**: Unverknüpfte Player zeigen einen Registrierungs-Bildschirm mit ihrer ID. Sobald in der Steuerung eine Rolle zugewiesen wird (`Live` oder `Stage`), wechselt die Anzeige automatisch auf die entsprechende Ansicht.
 * **Gerätenamen**: In der Player-Verwaltung kann jedem Gerät ein Name gegeben werden (z. B. „iPad links“), der auch auf dem Registrierungs-Bildschirm des Geräts erscheint.
+* **Trapez-Entzerrung (Beamer)**: Projiziert ein Beamer schräg von der Seite, lässt sich die Live-Ansicht dieses Geräts in der Player-Verwaltung entzerren: aktivieren, die vier Ecken ziehen (Feinjustierung mit Pfeiltasten) und mit dem Testraster prüfen, bis Raster rechtwinklig und Kreis rund sind. Ist die Entzerrung nicht aktiviert, wird nichts zusätzlich berechnet. Die Verzerrung kostet etwas Schärfe auf der zusammengedrückten Seite; eine Korrektur im Beamer selbst ist, wenn vorhanden, meist schärfer.
 * **Gerätespezifische Stage-Einstellungen**: In der Player-Verwaltung lassen sich Schriftgrösse, Breite der Kommentarspalte und vertikale Position pro Gerät übersteuern. Nicht angepasste Werte folgen den Grundeinstellungen unter „Einstellungen“.
 
 ### 5. Song- & Wellenform-Editor (`/editor`)

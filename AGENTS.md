@@ -28,6 +28,7 @@ shared/                      Plain CommonJS modules used by BOTH server and Reac
   playbackDefaults.js        PLAYBACK_DEFAULTS, createDefaultPlayback(), getSetting()
   stageSettings.js           Per-player stage setting limits, sanitizeStageSettings(), applyStageSettings()
   songTiming.js              getBarBeat(), computeLinesWithTimes(), getSongDuration() (re-exported by src/lib/timing.js)
+  keystone.js                Keystone correction: sanitizeKeystone(), keystoneMatrix3d() (legacy.js has an ES5 copy)
 src/App.jsx                  Root: theme provider, routing, picks the view; no business logic
 src/theme.js                 Palettes, ThemeContext, useTheme(), useThemeState(), COLORS
 src/lib/                     Pure functions (no React)
@@ -48,7 +49,7 @@ src/hooks/                   React hooks
   useMediaQuery.js           useMediaQuery(), useIsPhone() (below Tailwind `sm`, 640 px)
   useFullscreen.js, useAudioBuffer.js
 src/components/              Shared UI: TopMenuBar, VersionBadge, ConnectionBadge, GlobalStyles,
-                             form/RangeSetting, form/NumberDraftInput, display/BeatDot
+                             form/RangeSetting, form/NumberDraftInput, display/BeatDot, display/KeystoneLayer
 src/views/                   One file per screen: ControlView, OptionsView, PlayersView,
                              ProjectionView, StageView, UnassignedPlayerView
 src/views/control/           TransportButtons, LinePreview, SongList, LineList (each with a `compact` phone variant),
@@ -210,14 +211,16 @@ Application data is separated into three distinct JSON files. Writes are debounc
       "lastSeen": 1700000000000,
       "online": true,
       "name": "iPad links",
-      "stageSettings": { "stageFontSize": 80, "stagePositionY": 10 }
+      "stageSettings": { "stageFontSize": 80, "stagePositionY": 10 },
+      "keystone": { "enabled": true, "showGrid": false, "corners": { "tl": [0.05, 0.1], "tr": [1, 0], "br": [1, 1], "bl": [0.05, 0.9] } }
     }
   }
   ```
   The player ID is generated per browser and stored in `localStorage`. Every connected browser registers as a player (also the operator and devices opening `/stage` directly).
   * `name` (optional): operator-chosen device name (max 40 chars), shown in the player management and on the `/player` registration screen.
   * `stageSettings` (optional): per-device overrides of `stageFontSize`, `stageCommentWidthPercent` and `stagePositionY`. Only overridden keys are present; missing keys fall back to the global value in `playback`. The server whitelists and clamps them (`sanitizeStageSettings` in `shared/stageSettings.js`). Applied to `StageView` on that device — both on `/player` with role `stage` and on `/stage` — via `applyStageSettings()` (`shared/stageSettings.js`, re-exported as `applyPlayerStageSettings`) / `getStagePlayback()` (legacy). Limits: `shared/stageSettings.js`; UI labels: `PLAYER_STAGE_SETTINGS` in `src/lib/playback.js`; legacy key list: `PLAYER_STAGE_SETTING_KEYS` — keep the legacy list in sync.
-  * `registerPlayer` must preserve existing fields (role, stageSettings) of a known player.
+  * `keystone` (optional): keystone (trapezoid) correction for a projector device, applied to `/live` on that device only (`ProjectionView` / legacy `renderProjectionView`). Corners are fractions of the screen (clamped to -0.5..1.5 by `sanitizeKeystone`). **Only when `enabled` is true** the view is wrapped in `KeystoneLayer` (black frame + `matrix3d` with `transform-origin: 0 0`, recomputed on resize); otherwise the DOM is exactly as without the feature and nothing extra is computed — keep it that way. `showGrid` overlays a test pattern (10 % grid, centre cross, circle). Set via `setPlayerKeystone`; UI in `views/players/PlayerKeystone.jsx` (drag corners, arrow keys for fine steps).
+  * `registerPlayer` must preserve existing fields (role, stageSettings, keystone) of a known player.
 
 *(Note: A fallback migration automatically reads legacy `data/state.json` if the individual files do not yet exist. With no data at all, the server seeds a single demo song.)*
 
@@ -256,6 +259,7 @@ Application data is separated into three distinct JSON files. Writes are debounc
   * `{ type: 'setPlayerRole', playerId, role }`
   * `{ type: 'setPlayerName', playerId, name }` (empty name removes it)
   * `{ type: 'setPlayerStageSettings', playerId, stageSettings }` (replaces the player's overrides; `{}` resets to global settings)
+  * `{ type: 'setPlayerKeystone', playerId, keystone }` (replaces the player's keystone correction; `null` removes it)
   * `{ type: 'deletePlayer', playerId }`
   * `{ type: 'setSongs', songs }` (replaces the full song list)
   * `{ type: 'setPlayback', playback }` (replaces the full playback object)
@@ -280,7 +284,7 @@ See the repository layout in section 1 for where each piece lives:
 7. `useAudioBuffer`, `WaveformCanvas` & `WaveformEditor`: Web Audio decoding and canvas waveform with bar/beat grid, drag-and-drop line markers (`single` vs `following` drag modes), positive/negative `audioOffset`, zoom, numbered markers, and a "send to screens" toggle that drives the live displays from the editor's playback.
 8. Views in `views/` (selected in `App()` via `useViewRoute()` from the URL path; `/live`, `/stage`, `/player` are real routes, the operator sub-views are internal state at `/`):
    * `ControlView` (with `TopMenuBar`): song selection, playback control (`usePlaybackControls`), jump-to-line, mobile QR codes. Two arrangements of the same parts: `WideLayout` (tablet/desktop, unchanged) and `PhoneLayout` (`useIsPhone()`): collapsible song picker on top, transport row (icon-only stop/next) + live line pinned under the menu bar (`sticky top-14`), lines scrolling with the page, no translations, cue below the bar badge. When changing the control view, check both.
-   * `PlayersView`: list of connected devices, role assignment, deletion and per-device stage settings (`PlayerStageSettings`).
+   * `PlayersView`: list of connected devices, role assignment, deletion, per-device stage settings (`PlayerStageSettings`) and keystone correction (`PlayerKeystone`).
    * `ProjectionView`: audience view (`/live`) showing original line and translation, heartbeat dot, auto blackout if disconnected > 30 s or song ends; skips `stageOnly` lines.
    * `StageView`: teleprompter (`/stage`) with past/future lines, comment column, stage lead seconds and an optional static title bar with the song title (`stageShowTitle`, half the stage font size). Uses `useStageLineState()`: `activeIdx` (line being sung, white) vs. `positionIdx` (line the view is centered on). Before the first line starts, line 0 is centered but grey; after a line's duration or the song end the view stays on the last started line (grey). `legacy.js` mirrors this with `startedIndex()`.
    * `UnassignedPlayerView`: shown on `/player` until the operator assigns a role (`live` or `stage`).
