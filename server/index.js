@@ -7,6 +7,7 @@ const multer = require('multer');
 const { WebSocketServer } = require('ws');
 const { createDefaultPlayback } = require('../shared/playbackDefaults');
 const { sanitizeStageSettings } = require('../shared/stageSettings');
+const { sanitizeKeystone } = require('../shared/keystone');
 const { registerSyncRoutes } = require('./sync');
 const { createAutoNext } = require('./autoNext');
 
@@ -289,6 +290,17 @@ wss.on('connection', (ws) => {
       const next = { ...state.players[msg.playerId] };
       if (Object.keys(stageSettings).length) next.stageSettings = stageSettings;
       else delete next.stageSettings;
+      state.players[msg.playerId] = next;
+      persist();
+      broadcast({ type: 'players', players: state.players });
+    }
+
+    // Keystone correction of a projector device (shared/keystone.js); null removes it
+    if (msg.type === 'setPlayerKeystone' && msg.playerId && state.players[msg.playerId]) {
+      const keystone = sanitizeKeystone(msg.keystone);
+      const next = { ...state.players[msg.playerId] };
+      if (keystone) next.keystone = keystone;
+      else delete next.keystone;
       state.players[msg.playerId] = next;
       persist();
       broadcast({ type: 'players', players: state.players });

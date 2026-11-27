@@ -6,8 +6,12 @@ import { getSetting } from '../lib/playback';
 import { BeatDot } from '../components/display/BeatDot';
 import { useCurrentSong } from '../hooks/useCurrentSong';
 import { useFullscreen } from '../hooks/useFullscreen';
+import { KeystoneLayer } from '../components/display/KeystoneLayer';
 
-export function ProjectionView({ songs, playback, onExit, connected }) {
+// `keystone`: keystone correction of this device (players[id].keystone). Only
+// when it is enabled the view is wrapped in KeystoneLayer; otherwise it renders
+// exactly as without the feature.
+export function ProjectionView({ songs, playback, onExit, connected, keystone }) {
   const [blackout, setBlackout] = useState(false);
 
   useEffect(() => {
@@ -48,8 +52,10 @@ export function ProjectionView({ songs, playback, onExit, connected }) {
     ? 'items-end text-right'
     : 'items-center text-center';
 
-  return (
-    <div ref={containerRef} className="fixed inset-0 select-none cursor-none" style={{ background: COLORS.stageBg }}>
+  const keystoneOn = !!(keystone && keystone.enabled);
+
+  const view = (
+    <div ref={keystoneOn ? undefined : containerRef} className="fixed inset-0 select-none cursor-none" style={{ background: COLORS.stageBg }}>
       {line && (
         <div
           className={`absolute flex flex-col pointer-events-none ${alignClass}`}
@@ -106,4 +112,8 @@ export function ProjectionView({ songs, playback, onExit, connected }) {
       </button>
     </div>
   );
+
+  return keystoneOn
+    ? <KeystoneLayer keystone={keystone} fullscreenRef={containerRef}>{view}</KeystoneLayer>
+    : view;
 }
