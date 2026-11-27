@@ -23,8 +23,6 @@ export function InstanceSync() {
   const { colors: COLORS, isDark } = useTheme();
   const [url, setUrl] = useState(loadSyncUrl);
   const [includeAudio, setIncludeAudio] = useState(true);
-  // Password of the OTHER instance, only kept while this page is open
-  const [remotePassword, setRemotePassword] = useState('');
   const [preview, setPreview] = useState(null);
   const [selected, setSelected] = useState({});
   const [busy, setBusy] = useState(null); // 'preview' | 'import' | null
@@ -36,7 +34,7 @@ export function InstanceSync() {
     setError(null);
     setMessage(null);
     try {
-      const data = await previewSync(url, remotePassword);
+      const data = await previewSync(url);
       saveSyncUrl(data.origin);
       setUrl(data.origin);
       setPreview(data);
@@ -59,10 +57,10 @@ export function InstanceSync() {
     setError(null);
     setMessage(null);
     try {
-      const result = await importFromInstance(preview.origin, selectedIds, includeAudio, remotePassword);
+      const result = await importFromInstance(preview.origin, selectedIds, includeAudio);
       setMessage(summarize(result));
       // Show the new state (everything imported is now "same")
-      const data = await previewSync(preview.origin, remotePassword);
+      const data = await previewSync(preview.origin);
       setPreview(data);
       setSelected({});
     } catch (e) {
@@ -113,18 +111,6 @@ export function InstanceSync() {
           {busy === 'preview' ? 'Verbinde…' : 'Verbinden'}
         </button>
       </div>
-
-      <input
-        type="password"
-        value={remotePassword}
-        onChange={(e) => setRemotePassword(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter' && url.trim() && !busy) connect(); }}
-        placeholder="Passwort der anderen Instanz (falls geschützt)"
-        aria-label="Passwort der anderen Instanz"
-        autoComplete="off"
-        className="w-full max-w-sm px-3 py-1.5 rounded-lg text-sm border"
-        style={{ background: COLORS.inputBg, borderColor: COLORS.line, color: COLORS.ink }}
-      />
 
       <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: COLORS.ink }}>
         <input type="checkbox" checked={includeAudio} onChange={(e) => setIncludeAudio(e.target.checked)} />

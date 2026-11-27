@@ -22,7 +22,6 @@ server/index.js              Express server, WebSocket sync, persistence, upload
 server/sync.js               Instance sync routes: /api/export, /api/sync/preview, /api/sync/import
 server/songSync.js           Pure sync helpers: package format, compare, merge, audio file names
 server/autoNext.js           Timer that loads the next song when the playing one is over
-server/auth.js               Login (AUTOLYRICS_PASSWORD): session cookie, login page, route/WS guards
 src/index.jsx                React entry point
 shared/                      Plain CommonJS modules used by BOTH server and React client
   playbackDefaults.js        PLAYBACK_DEFAULTS, createDefaultPlayback(), getSetting()
@@ -225,8 +224,6 @@ Application data is separated into three distinct JSON files. Writes are debounc
 *(Note: A fallback migration automatically reads legacy `data/state.json` if the individual files do not yet exist. With no data at all, the server seeds a single demo song.)*
 
 ### HTTP Routes (`server/index.js`)
-* With `AUTOLYRICS_PASSWORD` set: `/` and `/index.html` redirect to `/login` without a session; `/api/upload` and `/api/sync/*` need the session (401 JSON otherwise); `/api/export` and `/uploads/*` need the session **or** `Authorization: Bearer <password>` (instance sync). `/live`, `/stage`, `/player`, static assets, `/healthz` and `/api/version` stay public. Without the variable everything is open.
-* `GET /login`, `POST /login` (form: `password`, `next`), `POST /logout`. Session cookie `autolyrics_session` (HttpOnly, SameSite=Lax, Secure behind https incl. `X-Forwarded-Proto`, 30 days), HMAC-signed with a random key in `DATA_DIR/session-secret` combined with the password (changing the password ends all sessions). Max 10 failed logins per IP and 15 min. `next` only accepts relative paths.
 * `GET /` and static files from `public/`
 * `GET /live`, `/stage`, `/player` → `public/index.html` (client-side routing)
 * `GET /uploads/*` → uploaded audio
@@ -242,7 +239,7 @@ Application data is separated into three distinct JSON files. Writes are debounc
 * Merge by song `id`: known ids are replaced in place, unknown ids appended, local-only songs kept. Playback, players and settings are never synced.
 * Audio keeps its file name. A song links to the remote's audio only if that file exists locally afterwards; otherwise it keeps its previous local audio. `audioUrl`/`audioName` are ignored when comparing songs (`status`).
 * Audio file names from a remote are validated by `audioFileName()` (plain file in `/uploads/`, no path parts) — keep that check, remote data is untrusted. Downloads go to a `.part` temp file first and are limited to 100 MB.
-* `/api/sync/*` take an optional `password` (the other instance's `AUTOLYRICS_PASSWORD`, typed in the sync form, never stored) and send it as `Authorization: Bearer` to the remote's `/api/export` and `/uploads/*`. `/api/sync/*` make the server request a user-given http(s) URL — only logged-in operators can trigger them.
+* Like the rest of the app there is no authentication: `/api/export` is readable by anyone on the network, and `/api/sync/*` makes the server request a user-given http(s) URL. Trusted networks only.
 * When changing the package format, bump `EXPORT_FORMAT_VERSION`; an instance refuses packages with a newer version.
 
 ### WebSocket Communication Protocol (`/ws`)
@@ -267,7 +264,7 @@ Application data is separated into three distinct JSON files. Writes are debounc
 * **Broadcast rules**: `songs` and `playback` updates are broadcast to all clients **except the sender** (the sender updates optimistically); `players` updates go to everyone. The server overwrites `updatedAt` on `setPlayback`.
 * **One socket per client**: both clients ignore events of a replaced socket (`isStale()` in `useSyncedState` / `legacy.js`). Without this, a forced reconnect on wake-up let the old socket's late `onclose` open an additional connection each time.
 * **Keepalive**: The server sends WS pings plus a JSON `ping` every 15 s and terminates unresponsive sockets. Clients send a JSON `ping` every 10 s, force-reconnect if nothing was received for 35 s, and also reconnect on `visibilitychange`, `pageshow`, `focus` and `online` (important for iPads waking from sleep).
-* **Login** (`server/auth.js`, only if `AUTOLYRICS_PASSWORD` is set): each connection gets `canControl` from the session cookie (and a same-origin check against cross-site WebSocket hijacking). Without it, only `ping`, `pong` and `registerPlayer` are accepted; everything else is answered with `{ type: 'error', code: 'not_authenticated' }`. The `state` message carries `authRequired` and `canControl`; the client redirects operator views to `/login` when `canControl` is false. Displays (`/live`, `/stage`, `/player`, legacy client) never need a login.
+* **No authentication**: any client on the network can change songs and playback. The app is meant for trusted local networks.
 
 ---
 

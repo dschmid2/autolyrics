@@ -11,10 +11,6 @@ export function useSyncedState() {
   const [serverIp, setServerIp] = useState('');
   const [serverPort, setServerPort] = useState('');
   const [serverVersion, setServerVersion] = useState('');
-  // From the server's `state` message (see server/auth.js). canControl is null
-  // until the first state message arrives.
-  const [authRequired, setAuthRequired] = useState(false);
-  const [canControl, setCanControl] = useState(null);
   const playerIdRef = useRef(getOrCreatePlayerId());
   const wsRef = useRef(null);
   const lastMessageTimeRef = useRef(Date.now());
@@ -79,10 +75,7 @@ export function useSyncedState() {
             if (msg.serverIp) setServerIp(msg.serverIp);
             if (msg.serverPort) setServerPort(msg.serverPort);
             if (msg.serverVersion) setServerVersion(msg.serverVersion);
-            setAuthRequired(!!msg.authRequired);
-            setCanControl(msg.canControl !== false);
           }
-          if (msg.type === 'error' && msg.code === 'not_authenticated') setCanControl(false);
           if (msg.type === 'songs') setSongs(msg.songs);
           if (msg.type === 'playback') setPlayback(msg.playback);
           if (msg.type === 'players') setPlayers(msg.players);
@@ -216,7 +209,5 @@ export function useSyncedState() {
     serverIp,
     serverPort,
     serverVersion,
-    authRequired,
-    canControl,
   };
 }

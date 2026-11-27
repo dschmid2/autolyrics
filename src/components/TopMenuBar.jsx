@@ -1,8 +1,8 @@
-import { Music, Tablet, Sliders, MonitorPlay, Tv, Eye, Sun, Moon, LogOut } from 'lucide-react';
+import { Music, Tablet, Sliders, MonitorPlay, Tv, Eye, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../theme';
 import { VersionBadge } from './VersionBadge';
 
-export function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, playersCount = 0, serverVersion, showLogout = false }) {
+export function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoStage, playersCount = 0, serverVersion }) {
   const { colors: COLORS, isDark, toggleTheme } = useTheme();
   const navItems = [
     { id: 'control', label: 'Steuerung', icon: MonitorPlay },
@@ -83,20 +83,6 @@ export function TopMenuBar({ activeView, onNavigate, onGotoProjection, onGotoSta
             <Tv size={14} />
             <span className="hidden md:inline">Stageview</span>
           </button>
-          {showLogout && (
-            // Plain form POST: the server clears the session cookie and shows the login page
-            <form method="post" action="/logout" className="flex">
-              <button
-                type="submit"
-                className="flex items-center justify-center p-2 rounded-lg text-xs font-semibold shadow-sm transition-all hover:opacity-90 border"
-                style={{ background: COLORS.panelBg2, borderColor: COLORS.line, color: COLORS.ink }}
-                title="Abmelden"
-                aria-label="Abmelden"
-              >
-                <LogOut size={15} />
-              </button>
-            </form>
-          )}
         </div>
       </div>
     </header>
